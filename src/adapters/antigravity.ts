@@ -255,7 +255,8 @@ export function normalizeAntigravityQuota(body: unknown): QuotaWindow[] {
   const out: QuotaWindow[] = [];
   for (const group of body.groups) {
     if (!isObject(group) || !Array.isArray(group.buckets)) continue;
-    const groupName = typeof group.displayName === "string" && group.displayName.trim() ? group.displayName.trim() : undefined;
+    const rawGroup = typeof group.displayName === "string" && group.displayName.trim() ? group.displayName.trim() : undefined;
+    const groupName = rawGroup && !/^gemini models$/i.test(rawGroup) ? rawGroup : undefined;
     for (const bucket of group.buckets) {
       if (!isObject(bucket) || bucket.disabled === true) continue;
       const remaining = typeof bucket.remainingFraction === "number" ? bucket.remainingFraction : null;

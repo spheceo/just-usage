@@ -1,10 +1,11 @@
-export type ProviderId = "claude" | "codex" | "cursor" | "opencode" | "antigravity";
+export type ProviderId = "claude" | "codex" | "cursor" | "opencode" | "antigravity" | "grok";
 
 export const PROVIDERS: ReadonlyArray<{ id: ProviderId; name: string; bin: string }> = [
   { id: "claude", name: "Claude", bin: "claude" },
   { id: "codex", name: "Codex", bin: "codex" },
   { id: "cursor", name: "Cursor", bin: "cursor-agent" },
   { id: "antigravity", name: "Antigravity", bin: "agy" },
+  { id: "grok", name: "Grok", bin: "grok" },
   { id: "opencode", name: "OpenCode Go", bin: "opencode" },
 ];
 

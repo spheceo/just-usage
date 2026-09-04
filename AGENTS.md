@@ -4,6 +4,10 @@ Local CLI that detects installed coding CLIs and serves a localhost page of thei
 
 `package.json` `version` is the single source of truth. The CLI, page footer, health route, and release tags all read from it.
 
+## Provider visibility
+
+Tabs default to providers that have a live quota (`ok`) or a fetch error. `signed_out` and `unsupported` stay off — including “signed in, no SuperGrok / Grok Build allowance.” The user can enable those in Options and will see signed-out or Unsupported.
+
 ## Versioning
 
 Increment the **patch** number (`0.0.X`) when pushing new changes, no matter how large the change is.

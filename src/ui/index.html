@@ -126,9 +126,10 @@
   .settings { display: flex; flex-direction: column; gap: 22px; }
   .opts-label { font-size: 11px; color: var(--dim); letter-spacing: .04em; text-transform: uppercase; margin-bottom: 8px; }
   #opts-providers { position: relative; }
-  .opts-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 0; user-select: none; transition: opacity .16s ease; }
-  .opts-row.dragging { opacity: .55; cursor: grabbing; }
+  .opts-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 0; user-select: none; transition: opacity .22s ease; }
+  .opts-row.dragging { opacity: .62; cursor: grabbing; }
   .opts-row.dragging .grip { cursor: grabbing; }
+  .opts-email { margin-top: 22px; padding-top: 14px; border-top: 1px solid var(--line); }
   .opts-prov { display: flex; align-items: center; gap: 8px; min-width: 0; }
   .opts-row img.logo { width: 14px; height: 14px; }
   .grip {
@@ -249,16 +250,16 @@
         <label><input type="radio" name="meter" value="used"> Used</label>
       </div>
     </div>
-    <label class="opts-row" for="opts-email">
-      <span>Show email on accounts</span>
-      <input class="chk" id="opts-email" type="checkbox">
-    </label>
     <div>
       <div class="opts-inline tight">
         <div class="opts-label">Accounts</div>
         <button class="refresh" id="acct-add" type="button">Add account</button>
       </div>
       <div id="opts-accounts"></div>
+      <label class="opts-row opts-email" for="opts-email">
+        <span>Show email on accounts</span>
+        <input class="chk" id="opts-email" type="checkbox">
+      </label>
     </div>
     <div class="opts-actions">
       <button class="opts-link" id="opts-signed-in" type="button">Signed-in only</button>
@@ -286,12 +287,14 @@
     ["codex", "Codex"],
     ["cursor", "Cursor"],
     ["antigravity", "Antigravity"],
+    ["grok", "Grok"],
     ["opencode", "OpenCode Go"],
   ];
   const SIGNIN_HINT = {
     claude: "Run <code>claude</code>, then <code>/login</code>.",
     codex: "Run <code>codex login</code>.",
     cursor: "Run <code>cursor-agent login</code>.",
+    grok: "Run <code>grok login --oauth</code>.",
     opencode: "Run <code>opencode auth login</code> or <code>just-usage add opencode</code>.",
     antigravity: "Run <code>agy</code> and complete Google sign-in.",
   };
@@ -323,22 +326,36 @@
   } catch {}
   let dragging = false;
   let showLeft = localStorage.getItem("ju.showLeft") !== "0";
-  let order = PROVIDERS.map(([id]) => id);
+  const defaultOrder = PROVIDERS.map(([id]) => id);
+  let order = defaultOrder.slice();
   try {
     const raw = JSON.parse(localStorage.getItem("ju.order"));
     if (Array.isArray(raw)) {
-      const known = new Set(order);
+      const known = new Set(defaultOrder);
       const next = raw.filter((id) => known.has(id));
-      for (const id of order) if (!next.includes(id)) next.push(id);
+      for (const id of defaultOrder) {
+        if (next.includes(id)) continue;
+        const after = defaultOrder.slice(defaultOrder.indexOf(id) + 1).find((x) => next.includes(x));
+        next.splice(after ? next.indexOf(after) : next.length, 0, id);
+      }
+      if (!localStorage.getItem("ju.orderGen") && next[next.length - 1] === "grok") {
+        const i = next.indexOf("opencode");
+        if (i !== -1) {
+          next.pop();
+          next.splice(i, 0, "grok");
+        }
+      }
       order = next;
     }
   } catch {}
+  localStorage.setItem("ju.orderGen", "2");
+  localStorage.setItem("ju.order", JSON.stringify(order));
 
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const rich = (s) => esc(s).replace(/`([^`]+)`/g, "<code>$1</code>");
   const sev = (p) => (p == null ? null : p >= 85 ? "crit" : p >= 60 ? "warn" : "ok");
   const rank = { ok: 1, warn: 2, crit: 3 };
-  const logo = (id) => `<img class="logo" src="/logos/${id}.svg?v=2" alt="" width="14" height="14">`;
+  const logo = (id) => `<img class="logo" src="/logos/${id}.svg?v=5" alt="" width="14" height="14">`;
   const formatPlan = (p) => String(p).replace(/\S+/g, (w) => w.charAt(0).toUpperCase() + w.slice(1));
   const GENERIC_LABELS = new Set(["", "default", "token", "go", "pending", "profile", "account", "codex"]);
   function isGenericLabel(label, email) {
@@ -393,14 +410,14 @@
     return d === 1 ? "1 day ago" : `${d} days ago`;
   }
 
-  function isSignedIn(p) {
-    return !!p?.accounts.some((a) => a.status !== "signed_out");
+  function isDefaultVisible(p) {
+    return !!p?.accounts.some((a) => a.status === "ok" || a.status === "error");
   }
 
   function visibleIds() {
     if (enabled) return order.filter((id) => enabled[id]);
     if (!report) return [];
-    return order.filter((id) => isSignedIn(report.providers.find((x) => x.id === id)));
+    return order.filter((id) => isDefaultVisible(report.providers.find((x) => x.id === id)));
   }
 
   function ensureActive() {
@@ -586,26 +603,29 @@
         row.classList.add("dragging");
         document.body.style.cursor = "grabbing";
         try { grip.setPointerCapture(e.pointerId); } catch {}
+        const ease = "transform .36s cubic-bezier(.4, 0, .2, 1)";
         const place = (clientY) => {
           const rows = [...list.querySelectorAll(".opts-row")];
           const others = rows.filter((r) => r !== row);
           const y = clientY - list.getBoundingClientRect().top + list.scrollTop;
-          const before = others.find((r) => y < r.offsetTop + r.offsetHeight / 2);
+          const before = others.find((r) => y < r.offsetTop + r.offsetHeight / 2 - 6);
           if ((before && row.nextElementSibling === before) || (!before && list.lastElementChild === row)) return;
-          const first = new Map(rows.map((r) => [r, r.getBoundingClientRect()]));
+          const first = new Map(rows.map((r) => {
+            r.style.transition = "none";
+            return [r, r.getBoundingClientRect()];
+          }));
           if (before) list.insertBefore(row, before);
           else list.appendChild(row);
-          for (const r of others) {
-            const from = first.get(r);
-            if (!from) continue;
-            r.style.transition = "none";
+          for (const r of rows) {
             r.style.transform = "";
-            const to = r.getBoundingClientRect();
-            const dy = from.top - to.top;
-            if (!dy) continue;
-            r.style.transform = `translateY(${dy}px)`;
-            r.getBoundingClientRect();
-            r.style.transition = "transform .2s cubic-bezier(.2,.7,.2,1)";
+            const from = first.get(r);
+            const dy = from.top - r.getBoundingClientRect().top;
+            r.style.transform = dy ? `translateY(${dy}px)` : "";
+          }
+          list.getBoundingClientRect();
+          for (const r of rows) {
+            if (!r.style.transform) continue;
+            r.style.transition = ease;
             r.style.transform = "";
           }
         };
@@ -617,10 +637,12 @@
           document.body.style.cursor = "";
           dragging = false;
           row.classList.remove("dragging");
-          for (const r of list.querySelectorAll(".opts-row")) {
-            r.style.transition = "";
-            r.style.transform = "";
-          }
+          window.setTimeout(() => {
+            for (const r of list.querySelectorAll(".opts-row")) {
+              r.style.transition = "";
+              r.style.transform = "";
+            }
+          }, 380);
           const next = [...list.querySelectorAll(".opts-row")].map((r) => r.dataset.id);
           if (next.join() !== order.join()) persistOrder(next);
         };
@@ -749,7 +771,8 @@
           <button class="pick-btn" type="button" data-id="antigravity">${logo("antigravity")} Antigravity</button>
           <button class="pick-btn" type="button" data-id="opencode">${logo("opencode")} OpenCode Go</button>
         </div>
-        <div class="acct-note">One Cursor account for now — whatever <code>cursor-agent</code> is signed in as.</div>`;
+        <div class="acct-note">One Cursor account for now — whatever <code>cursor-agent</code> is signed in as.</div>
+        <div class="acct-note">One Grok account for now — whatever <code>grok</code> is signed in as.</div>`;
     } else if (wizard.step === "label") {
       body = `<div class="acct-note">Optional. Leave blank to show as Account 2, Account 3, …</div>
         <input class="field" id="wiz-label" placeholder="Label (optional)" value="${esc(wizard.label)}">

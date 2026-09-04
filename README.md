@@ -13,6 +13,7 @@ just-usage            # http://<your-host>:5757
 - Codex
 - Cursor
 - Antigravity (`agy`)
+- Grok (`grok`)
 - OpenCode Go
 
 > Read-only. Credentials stay with the CLIs that own them and never reach the browser. Run `just-usage upgrade` to update.

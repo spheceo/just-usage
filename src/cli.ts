@@ -34,6 +34,7 @@ Usage
 
 Providers: ${PROVIDERS.map((p) => p.name).join(", ")}
 Cursor uses whatever \`cursor-agent\` is logged in as (single account).
+Grok uses whatever \`grok login --oauth\` stored (single account).
 Antigravity extras are extra Google logins; they do not replace \`agy\`'s signed-in account.
 `;
 
@@ -132,7 +133,7 @@ async function cmdStatus(argv: string[]) {
 
 function cmdAccounts() {
   const rows = listAccounts();
-  console.log("Default accounts come from each CLI's own login (codex login, claude /login, cursor-agent login, opencode auth login, agy).");
+  console.log("Default accounts come from each CLI's own login (codex login, claude /login, cursor-agent login, grok login --oauth, opencode auth login, agy).");
   if (rows.length === 0) {
     console.log("\nNo extra accounts. Add one with: just-usage add codex | claude | opencode | antigravity");
     return;
@@ -216,6 +217,8 @@ async function cmdAdd(argv: string[]) {
       return addAntigravityCli(values.label);
     case "cursor":
       fail("Cursor is single-account: just-usage shows whatever `cursor-agent` is logged in as.");
+    case "grok":
+      fail("Grok is single-account: just-usage shows whatever `grok` is logged in as.");
   }
 }
 

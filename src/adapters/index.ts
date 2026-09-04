@@ -3,6 +3,7 @@ import { fetchAntigravity } from "./antigravity.ts";
 import { fetchClaude } from "./claude.ts";
 import { fetchCodex } from "./codex.ts";
 import { fetchCursor } from "./cursor.ts";
+import { fetchGrok } from "./grok.ts";
 import { fetchOpenCode } from "./opencode.ts";
 
 export function fetchSnapshot(account: ResolvedAccount): Promise<QuotaSnapshot> {
@@ -15,6 +16,8 @@ export function fetchSnapshot(account: ResolvedAccount): Promise<QuotaSnapshot> 
       return fetchCursor(account);
     case "antigravity":
       return fetchAntigravity(account);
+    case "grok":
+      return fetchGrok(account);
     case "opencode":
       return fetchOpenCode(account);
   }

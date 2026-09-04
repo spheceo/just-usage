@@ -3,8 +3,9 @@ import { normalizeCodexRateLimits } from "../src/adapters/codex.ts";
 import { normalizeClaudeUsage } from "../src/adapters/claude.ts";
 import { normalizeCursorUsage, normalizeGrokBotUsage, planFromCursorPlanInfo, tokenFromAuthJson } from "../src/adapters/cursor.ts";
 import { normalizeAntigravityQuota, parseAgyKeyringBlob, planFromCodeAssist } from "../src/adapters/antigravity.ts";
+import { normalizeGrokCredits, planFromGrokSettings, sessionFromAuthJson } from "../src/adapters/grok.ts";
 import { normalizeOpenCodeUsage } from "../src/adapters/opencode.ts";
-import { antigravityQuota, claudeUsage, claudeUsageLimitsOnly, codexRateLimits, cursorUsage, openCodeUsage } from "./fixtures.ts";
+import { antigravityQuota, claudeUsage, claudeUsageLimitsOnly, codexRateLimits, cursorUsage, grokCreditsFree, grokCreditsSubscribed, openCodeUsage } from "./fixtures.ts";
 
 describe("codex", () => {
   test("normalizes both windows, plan, multiple limits and reset credits", () => {
@@ -120,7 +121,8 @@ describe("antigravity", () => {
   test("turns remainingFraction into used windows grouped by family", () => {
     const w = normalizeAntigravityQuota(antigravityQuota);
     expect(w.map((x) => x.id)).toEqual(["gemini-weekly", "gemini-5h", "3p-weekly", "3p-5h"]);
-    expect(w[0]).toMatchObject({ label: "Weekly Usage", group: "Gemini Models", usedPercent: 20, windowMinutes: 10080, kind: "rolling" });
+    expect(w[0]).toMatchObject({ label: "Weekly Usage", usedPercent: 20, windowMinutes: 10080, kind: "rolling" });
+    expect(w[0]!.group).toBeUndefined();
     expect(w[1]).toMatchObject({ label: "5h Usage", usedPercent: 75, windowMinutes: 300, resetsAt: "2026-09-04T23:40:30.000Z" });
     expect(w[2]).toMatchObject({ usedPercent: 0, group: "Claude and GPT models" });
     expect(w[3]).toMatchObject({ usedPercent: 100 });
@@ -142,5 +144,45 @@ describe("antigravity", () => {
     expect(parsed?.accessToken).toBe("ya29.abc");
     expect(parsed?.refreshToken).toBe("1//xyz");
     expect(parsed?.expiry).toBe(Date.parse("2026-09-04T21:40:07.158017+02:00"));
+  });
+});
+
+describe("grok", () => {
+  test("maps weekly percent and on-demand when a pool exists", () => {
+    const w = normalizeGrokCredits(grokCreditsSubscribed);
+    expect(w.map((x) => x.id)).toEqual(["weekly", "on_demand"]);
+    expect(w[0]).toMatchObject({
+      label: "Weekly Usage",
+      usedPercent: 37.5,
+      windowMinutes: 10080,
+      kind: "rolling",
+      resetsAt: "2026-09-07T08:29:53.299Z",
+    });
+    expect(w[1]).toMatchObject({ usedPercent: 25, note: "$12.50 of $50" });
+  });
+
+  test("does not invent a 0% bar when signed in with no allowance", () => {
+    expect(normalizeGrokCredits(grokCreditsFree)).toEqual([]);
+    expect(normalizeGrokCredits({})).toEqual([]);
+    expect(normalizeGrokCredits(null)).toEqual([]);
+  });
+
+  test("reads plan from remote settings and OIDC auth.json", () => {
+    expect(planFromGrokSettings({ subscription_tier_display: "SuperGrok Heavy" })).toBe("SuperGrok Heavy");
+    expect(planFromGrokSettings({ subscription_tier: "supergrok_plus" })).toBe("SuperGrok Plus");
+    expect(planFromGrokSettings({ subscription_tier: "custom_tier" })).toBe("custom tier");
+    expect(planFromGrokSettings({})).toBeNull();
+    const session = sessionFromAuthJson({
+      "https://auth.x.ai::client": {
+        key: "access-token",
+        refresh_token: "refresh-token",
+        auth_mode: "oidc",
+        email: "dev@example.com",
+        oidc_client_id: "client",
+        expires_at: "2026-09-05T01:00:00.000Z",
+      },
+    });
+    expect(session).toMatchObject({ accessToken: "access-token", email: "dev@example.com", authMode: "oidc" });
+    expect(sessionFromAuthJson({ auth_mode: "oidc" })).toBeNull();
   });
 });

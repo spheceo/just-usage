@@ -24,6 +24,7 @@ import antigravityLogo from "./ui/logos/antigravity.svg" with { type: "text" };
 import claudeLogo from "./ui/logos/claude.svg" with { type: "text" };
 import codexLogo from "./ui/logos/codex.svg" with { type: "text" };
 import cursorLogo from "./ui/logos/cursor.svg" with { type: "text" };
+import grokLogo from "./ui/logos/grok.svg" with { type: "text" };
 import opencodeLogo from "./ui/logos/opencode.svg" with { type: "text" };
 
 const LOGOS: Record<string, string> = {
@@ -32,6 +33,7 @@ const LOGOS: Record<string, string> = {
   cursor: cursorLogo,
   opencode: opencodeLogo,
   antigravity: antigravityLogo,
+  grok: grokLogo,
 };
 
 export interface ServerOptions {

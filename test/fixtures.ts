@@ -113,6 +113,34 @@ export const antigravityQuota = {
   ],
 };
 
+export const grokCreditsSubscribed = {
+  config: {
+    creditUsagePercent: 37.5,
+    currentPeriod: {
+      type: "USAGE_PERIOD_TYPE_WEEKLY",
+      start: "2026-08-31T08:29:53.299316+00:00",
+      end: "2026-09-07T08:29:53.299316+00:00",
+    },
+    onDemandCap: { val: 50 },
+    onDemandUsed: { val: 12.5 },
+    prepaidBalance: { val: 0 },
+    billingPeriodEnd: "2026-09-07T08:29:53.299316+00:00",
+  },
+};
+
+export const grokCreditsFree = {
+  config: {
+    currentPeriod: {
+      type: "USAGE_PERIOD_TYPE_WEEKLY",
+      start: "2026-08-31T08:29:53.299316+00:00",
+      end: "2026-09-07T08:29:53.299316+00:00",
+    },
+    onDemandCap: { val: 0 },
+    onDemandUsed: { val: 0 },
+    prepaidBalance: { val: 0 },
+  },
+};
+
 export const openCodeUsage = {
   usage: {
     rolling: { status: "ok", percent: 4, resetsAt: "2026-08-13T16:27:38.287Z" },
