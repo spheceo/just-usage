@@ -36,9 +36,7 @@ describe("changelog notes", () => {
       ),
     ).toBe(
       [
-        "Just Usage v0.0.2",
-        "",
-        "What's Changed",
+        "## What's Changed",
         "Add settings, extra accounts, and Tailscale URLs in [#aaaaaaa](https://github.com/spheceo/just-usage/commit/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa)",
         "Add favicon in [#bbbbbbb](https://github.com/spheceo/just-usage/commit/bbbbbbbccccccccccccccccccccccccccccccccc)",
         "",
@@ -56,7 +54,7 @@ describe("changelog notes", () => {
     expect(changelog.startsWith("# Changelog\n\n## v0.0.2\n\n")).toBe(true);
     expect(extractReleaseNotes(changelog, "v0.0.2")).toBe(notes);
     expect(
-      extractReleaseNotes(prependChangelog(changelog, "Just Usage v0.0.3\n\nWhat's Changed\nNext\n", "v0.0.3"), "v0.0.2"),
+      extractReleaseNotes(prependChangelog(changelog, "## What's Changed\nNext\n", "v0.0.3"), "v0.0.2"),
     ).toBe(notes);
   });
 

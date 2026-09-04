@@ -27,14 +27,12 @@ export function parseCommitLog(raw: string): ChangeCommit[] {
     .filter((row): row is ChangeCommit => row !== null);
 }
 
-export function formatReleaseNotes(version: string, commits: ChangeCommit[], repo: string): string {
-  const tag = version.startsWith("v") ? version : `v${version}`;
-  const bare = tag.slice(1);
+export function formatReleaseNotes(_version: string, commits: ChangeCommit[], repo: string): string {
   const lines = commits.map((commit) => {
     const short = commit.sha.slice(0, 7);
     return `${commit.subject} in [#${short}](https://github.com/${repo}/commit/${commit.sha})`;
   });
-  return `Just Usage v${bare}\n\nWhat's Changed\n${lines.join("\n")}\n`;
+  return `## What's Changed\n${lines.join("\n")}\n`;
 }
 
 export function prependChangelog(existing: string, notes: string, version: string): string {
@@ -50,7 +48,7 @@ export function extractReleaseNotes(changelog: string, version: string): string 
   const start = changelog.indexOf(`${heading}\n`);
   if (start === -1) return null;
   const after = changelog.slice(start + heading.length).replace(/^\n+/, "");
-  const next = after.search(/\n## /);
+  const next = after.search(/\n## v\d/);
   const notes = (next === -1 ? after : after.slice(0, next)).trim();
   return notes ? `${notes}\n` : null;
 }

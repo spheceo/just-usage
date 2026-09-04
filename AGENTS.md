@@ -17,9 +17,7 @@ Release with `bun run release` (defaults to patch) or `bun run release patch`.
 `CHANGELOG.md` is the source of truth for GitHub Releases. `bun run release` prepends a `## vX.Y.Z` section whose body is reused as the release notes:
 
 ```
-Just Usage vX.Y.Z
-
-What's Changed
+## What's Changed
 <commit subject> in [#sha](https://github.com/spheceo/just-usage/commit/sha)
 ```
 
