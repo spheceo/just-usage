@@ -2,8 +2,9 @@ import { describe, expect, test } from "bun:test";
 import { normalizeCodexRateLimits } from "../src/adapters/codex.ts";
 import { normalizeClaudeUsage } from "../src/adapters/claude.ts";
 import { normalizeCursorUsage, normalizeGrokBotUsage, planFromCursorPlanInfo, tokenFromAuthJson } from "../src/adapters/cursor.ts";
+import { normalizeAntigravityQuota, parseAgyKeyringBlob, planFromCodeAssist } from "../src/adapters/antigravity.ts";
 import { normalizeOpenCodeUsage } from "../src/adapters/opencode.ts";
-import { claudeUsage, claudeUsageLimitsOnly, codexRateLimits, cursorUsage, openCodeUsage } from "./fixtures.ts";
+import { antigravityQuota, claudeUsage, claudeUsageLimitsOnly, codexRateLimits, cursorUsage, openCodeUsage } from "./fixtures.ts";
 
 describe("codex", () => {
   test("normalizes both windows, plan, multiple limits and reset credits", () => {
@@ -112,5 +113,34 @@ describe("opencode go", () => {
   test("accepts an unwrapped body", () => {
     expect(normalizeOpenCodeUsage(openCodeUsage.usage)).toHaveLength(3);
     expect(normalizeOpenCodeUsage({})).toEqual([]);
+  });
+});
+
+describe("antigravity", () => {
+  test("turns remainingFraction into used windows grouped by family", () => {
+    const w = normalizeAntigravityQuota(antigravityQuota);
+    expect(w.map((x) => x.id)).toEqual(["gemini-weekly", "gemini-5h", "3p-weekly", "3p-5h"]);
+    expect(w[0]).toMatchObject({ label: "Weekly Usage", group: "Gemini Models", usedPercent: 20, windowMinutes: 10080, kind: "rolling" });
+    expect(w[1]).toMatchObject({ label: "5h Usage", usedPercent: 75, windowMinutes: 300, resetsAt: "2026-09-04T23:40:30.000Z" });
+    expect(w[2]).toMatchObject({ usedPercent: 0, group: "Claude and GPT models" });
+    expect(w[3]).toMatchObject({ usedPercent: 100 });
+  });
+
+  test("skips disabled buckets and unknown shapes", () => {
+    expect(normalizeAntigravityQuota({ groups: [{ buckets: [{ remainingFraction: 0.5, disabled: true }] }] })).toEqual([]);
+    expect(normalizeAntigravityQuota({})).toEqual([]);
+    expect(normalizeAntigravityQuota(null)).toEqual([]);
+  });
+
+  test("reads currentTier name and go-keyring blobs", () => {
+    expect(planFromCodeAssist({ currentTier: { id: "free-tier", name: "Antigravity" } })).toBe("Antigravity");
+    const raw = "go-keyring-base64:" + Buffer.from(JSON.stringify({
+      token: { access_token: "ya29.abc", refresh_token: "1//xyz", expiry: "2026-09-04T21:40:07.158017+02:00", token_type: "Bearer" },
+      auth_method: "consumer",
+    })).toString("base64");
+    const parsed = parseAgyKeyringBlob(raw);
+    expect(parsed?.accessToken).toBe("ya29.abc");
+    expect(parsed?.refreshToken).toBe("1//xyz");
+    expect(parsed?.expiry).toBe(Date.parse("2026-09-04T21:40:07.158017+02:00"));
   });
 });

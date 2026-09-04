@@ -12,6 +12,7 @@ just-usage            # http://<your-host>:5757
 - Claude (Claude Code)
 - Codex
 - Cursor
+- Antigravity (`agy`)
 - OpenCode Go
 
 > Read-only. Credentials stay with the CLIs that own them and never reach the browser. Run `just-usage upgrade` to update.

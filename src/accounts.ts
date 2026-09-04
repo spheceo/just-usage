@@ -1,4 +1,12 @@
 import { renameSync, rmSync } from "node:fs";
+import {
+  antigravityAuthUrl,
+  createPkce,
+  exchangeAntigravityCode,
+  fetchAgyEmail,
+  parseAntigravityAuthInput,
+  serializeAgySecret,
+} from "./adapters/antigravity.ts";
 import { verifyClaudeToken } from "./adapters/claude.ts";
 import { startCodexLogin, type CodexLoginHandle } from "./adapters/codex.ts";
 import { fetchOpenCodeUsage } from "./adapters/opencode.ts";
@@ -237,4 +245,111 @@ export async function submitCodexCallback(sessionId: string, url: string): Promi
   if (!rec) throw new AccountError("Login session expired.", 404);
   if (rec.status !== "waiting") return;
   await submitLocalCallback(url);
+}
+
+interface AgyPending {
+  id: string;
+  label?: string;
+  accountId?: string;
+  state: string;
+  verifier: string;
+  authUrl: string;
+  status: "waiting" | "done" | "error";
+  error?: string;
+  account?: AccountRecord;
+  timer: ReturnType<typeof setTimeout>;
+}
+
+const agySessions = new Map<string, AgyPending>();
+
+function dropAgySession(id: string) {
+  const rec = agySessions.get(id);
+  if (!rec) return;
+  clearTimeout(rec.timer);
+  agySessions.delete(id);
+}
+
+function startAgySession(opts: { label?: string; accountId?: string }): { sessionId: string; authUrl: string } {
+  const pkce = createPkce();
+  const state = crypto.randomUUID();
+  const id = crypto.randomUUID();
+  const authUrl = antigravityAuthUrl({ state, challenge: pkce.challenge });
+  const rec: AgyPending = {
+    id,
+    label: opts.label?.trim() || undefined,
+    accountId: opts.accountId,
+    state,
+    verifier: pkce.verifier,
+    authUrl,
+    status: "waiting",
+    timer: setTimeout(() => dropAgySession(id), SESSION_TTL_MS),
+  };
+  rec.timer.unref?.();
+  agySessions.set(id, rec);
+  return { sessionId: id, authUrl };
+}
+
+export async function beginAntigravityAdd(label?: string): Promise<{ sessionId: string; authUrl: string }> {
+  if (!(await which("agy"))) throw new AccountError("agy is not installed (https://antigravity.google/docs/cli/install).");
+  return startAgySession({ label });
+}
+
+export async function beginAntigravityRelogin(accountId: string): Promise<{ sessionId: string; authUrl: string }> {
+  const existing = getAccount(accountId);
+  if (!existing) throw new AccountError(`Unknown account: ${accountId}`, 404);
+  if (existing.provider !== "antigravity" || existing.kind !== "token") {
+    throw new AccountError(`${accountId} cannot be re-authenticated this way.`);
+  }
+  return startAgySession({ accountId });
+}
+
+export function antigravitySessionStatus(sessionId: string): {
+  status: "waiting" | "done" | "error";
+  authUrl?: string;
+  error?: string;
+  account?: AccountRecord;
+} {
+  const rec = agySessions.get(sessionId);
+  if (!rec) return { status: "error", error: "Login session expired." };
+  return { status: rec.status, authUrl: rec.authUrl, error: rec.error, account: rec.account };
+}
+
+export async function submitAntigravityCallback(sessionId: string, raw: string): Promise<AccountRecord> {
+  const parsed = parseAntigravityAuthInput(raw);
+  if (!parsed) {
+    throw new AccountError("Paste the code from the Antigravity page, or the antigravity.google/oauth-callback URL.");
+  }
+  const rec = agySessions.get(sessionId);
+  if (!rec) throw new AccountError("Login session expired.", 404);
+  if (rec.status === "done" && rec.account) return rec.account;
+  const { code, state } = parsed;
+  if (state && state !== rec.state) throw new AccountError("Sign-in state did not match. Start again.");
+  try {
+    const token = await exchangeAntigravityCode(code, rec.verifier);
+    const email = await fetchAgyEmail(token.accessToken);
+    const named = rec.label?.trim() || "";
+    if (rec.accountId) {
+      await secretStore().set(rec.accountId, serializeAgySecret(token));
+      updateAccount(rec.accountId, { email });
+      rec.account = getAccount(rec.accountId)!;
+    } else {
+      const id = newAccountId("antigravity", named || email || "account");
+      await secretStore().set(id, serializeAgySecret(token));
+      rec.account = {
+        id,
+        provider: "antigravity",
+        label: named,
+        kind: "token",
+        email,
+        createdAt: new Date().toISOString(),
+      };
+      saveAccount(rec.account);
+    }
+    rec.status = "done";
+    return rec.account;
+  } catch (e) {
+    rec.status = "error";
+    rec.error = e instanceof Error ? e.message : String(e);
+    throw new AccountError(rec.error);
+  }
 }

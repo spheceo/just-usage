@@ -81,6 +81,38 @@ export const cursorUsage = {
   },
 };
 
+export const antigravityQuota = {
+  groups: [
+    {
+      displayName: "Gemini Models",
+      description: "Models within this group: Gemini Flash, Gemini Pro",
+      buckets: [
+        {
+          bucketId: "gemini-weekly",
+          displayName: "Weekly Limit Remaining",
+          window: "weekly",
+          resetTime: "2026-09-11T18:40:30Z",
+          remainingFraction: 0.8,
+        },
+        {
+          bucketId: "gemini-5h",
+          displayName: "Five Hour Limit Remaining",
+          window: "5h",
+          resetTime: "2026-09-04T23:40:30Z",
+          remainingFraction: 0.25,
+        },
+      ],
+    },
+    {
+      displayName: "Claude and GPT models",
+      buckets: [
+        { bucketId: "3p-weekly", window: "weekly", remainingFraction: 1, resetTime: "2026-09-11T18:45:34Z" },
+        { bucketId: "3p-5h", window: "5h", remainingFraction: 0, resetTime: "2026-09-04T23:45:34Z" },
+      ],
+    },
+  ],
+};
+
 export const openCodeUsage = {
   usage: {
     rolling: { status: "ok", percent: 4, resetsAt: "2026-08-13T16:27:38.287Z" },

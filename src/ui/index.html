@@ -111,24 +111,24 @@
   .credits-avail:hover, .credits-avail:focus-visible { color: var(--fg); }
   .credits-tip {
     display: none; position: absolute; right: 0; bottom: calc(100% + 8px);
-    min-width: 240px; padding: 8px 10px;
+    min-width: 0; padding: 8px 10px;
     background: var(--surface); border: 1px solid var(--line-2); border-radius: 8px;
     color: var(--muted); font-size: 11px; line-height: 1.45; white-space: nowrap; z-index: 5;
   }
   .credits-avail:hover .credits-tip, .credits-avail:focus-visible .credits-tip { display: block; }
-  .credits-tip-row { display: flex; align-items: baseline; gap: 12px; }
+  .credits-tip-row { display: flex; align-items: baseline; gap: 10px; width: max-content; }
   .credits-tip-row + .credits-tip-row { margin-top: 6px; }
   .credits-tip-n { color: var(--fg); font-variant-numeric: tabular-nums; min-width: 1em; }
-  .credits-tip-date { color: var(--fg); flex: 1; }
-  .credits-tip-left { color: var(--dim); font-variant-numeric: tabular-nums; margin-left: auto; }
+  .credits-tip-date { color: var(--fg); }
+  .credits-tip-left { color: var(--dim); font-variant-numeric: tabular-nums; }
 
   #dash[hidden], #settings[hidden] { display: none; }
   .settings { display: flex; flex-direction: column; gap: 22px; }
   .opts-label { font-size: 11px; color: var(--dim); letter-spacing: .04em; text-transform: uppercase; margin-bottom: 8px; }
-  .opts-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 0; user-select: none; }
-  .opts-row.dragging {
-    background: var(--surface); border: 1px solid var(--line-2); border-radius: 8px; padding: 6px 8px;
-  }
+  #opts-providers { position: relative; }
+  .opts-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 0; user-select: none; transition: opacity .16s ease; }
+  .opts-row.dragging { opacity: .55; cursor: grabbing; }
+  .opts-row.dragging .grip { cursor: grabbing; }
   .opts-prov { display: flex; align-items: center; gap: 8px; min-width: 0; }
   .opts-row img.logo { width: 14px; height: 14px; }
   .grip {
@@ -285,6 +285,7 @@
     ["claude", "Claude"],
     ["codex", "Codex"],
     ["cursor", "Cursor"],
+    ["antigravity", "Antigravity"],
     ["opencode", "OpenCode Go"],
   ];
   const SIGNIN_HINT = {
@@ -292,6 +293,7 @@
     codex: "Run <code>codex login</code>.",
     cursor: "Run <code>cursor-agent login</code>.",
     opencode: "Run <code>opencode auth login</code> or <code>just-usage add opencode</code>.",
+    antigravity: "Run <code>agy</code> and complete Google sign-in.",
   };
   const $ = (id) => document.getElementById(id);
   let report = null;
@@ -582,22 +584,43 @@
         const row = grip.closest(".opts-row");
         dragging = true;
         row.classList.add("dragging");
+        document.body.style.cursor = "grabbing";
+        try { grip.setPointerCapture(e.pointerId); } catch {}
         const place = (clientY) => {
-          const others = [...list.querySelectorAll(".opts-row")].filter((r) => r !== row);
-          const before = others.find((r) => {
-            const b = r.getBoundingClientRect();
-            return clientY < b.top + b.height / 2;
-          });
+          const rows = [...list.querySelectorAll(".opts-row")];
+          const others = rows.filter((r) => r !== row);
+          const y = clientY - list.getBoundingClientRect().top + list.scrollTop;
+          const before = others.find((r) => y < r.offsetTop + r.offsetHeight / 2);
+          if ((before && row.nextElementSibling === before) || (!before && list.lastElementChild === row)) return;
+          const first = new Map(rows.map((r) => [r, r.getBoundingClientRect()]));
           if (before) list.insertBefore(row, before);
           else list.appendChild(row);
+          for (const r of others) {
+            const from = first.get(r);
+            if (!from) continue;
+            r.style.transition = "none";
+            r.style.transform = "";
+            const to = r.getBoundingClientRect();
+            const dy = from.top - to.top;
+            if (!dy) continue;
+            r.style.transform = `translateY(${dy}px)`;
+            r.getBoundingClientRect();
+            r.style.transition = "transform .2s cubic-bezier(.2,.7,.2,1)";
+            r.style.transform = "";
+          }
         };
         const move = (ev) => place(ev.clientY);
         const stop = () => {
           document.removeEventListener("pointermove", move);
           document.removeEventListener("pointerup", stop);
           document.removeEventListener("pointercancel", stop);
+          document.body.style.cursor = "";
           dragging = false;
           row.classList.remove("dragging");
+          for (const r of list.querySelectorAll(".opts-row")) {
+            r.style.transition = "";
+            r.style.transform = "";
+          }
           const next = [...list.querySelectorAll(".opts-row")].map((r) => r.dataset.id);
           if (next.join() !== order.join()) persistOrder(next);
         };
@@ -723,6 +746,7 @@
       body = `<div class="pick">
           <button class="pick-btn" type="button" data-id="claude">${logo("claude")} Claude</button>
           <button class="pick-btn" type="button" data-id="codex">${logo("codex")} Codex</button>
+          <button class="pick-btn" type="button" data-id="antigravity">${logo("antigravity")} Antigravity</button>
           <button class="pick-btn" type="button" data-id="opencode">${logo("opencode")} OpenCode Go</button>
         </div>
         <div class="acct-note">One Cursor account for now — whatever <code>cursor-agent</code> is signed in as.</div>`;
@@ -731,12 +755,15 @@
         <input class="field" id="wiz-label" placeholder="Label (optional)" value="${esc(wizard.label)}">
         <div class="acct-actions"><button class="opts-link" id="wiz-back" type="button">Back</button>
           <button class="refresh" id="wiz-next" type="button">Continue</button></div>`;
-    } else if (wizard.provider === "codex") {
-      body = `<div class="acct-note">Sign in with ChatGPT. If you are not on this machine, paste the localhost callback after the redirect.</div>
+    } else if (wizard.provider === "codex" || wizard.provider === "antigravity") {
+      const oauth = wizard.provider === "codex"
+        ? { note: "Sign in with ChatGPT. If you are not on this machine, paste the localhost callback after the redirect.", action: "Sign in with ChatGPT", ph: "http://localhost:… callback", start: "wiz-codex", submit: "Submit callback" }
+        : { note: "Sign in with Google. Copy the code from the Antigravity page (or paste the callback URL). This extra login does not replace <code>agy</code>'s default account.", action: "Sign in with Google", ph: "4/0A… code from the page", start: "wiz-agy", submit: "Submit code" };
+      body = `<div class="acct-note">${oauth.note}</div>
         ${wizard.authUrl ? `<div class="acct-url">Open <a href="${esc(wizard.authUrl)}" target="_blank" rel="noreferrer">this sign-in URL</a></div>
-          <input class="field" id="wiz-callback" placeholder="http://localhost:… callback" value="${esc(wizard.callback)}">
-          <button class="refresh" id="wiz-callback-go" type="button">Submit callback</button>` 
-          : `<button class="refresh" id="wiz-codex" type="button">Sign in with ChatGPT</button>`}
+          <input class="field" id="wiz-callback" placeholder="${esc(oauth.ph)}" value="${esc(wizard.callback)}">
+          <button class="refresh" id="wiz-callback-go" type="button">${oauth.submit || "Submit callback"}</button>` 
+          : `<button class="refresh" id="${oauth.start}" type="button">${oauth.action}</button>`}
         <button class="opts-link" id="wiz-back" type="button">Back</button>`;
     } else {
       const ph = wizard.provider === "claude" ? "Setup token from <code>claude setup-token</code>" : "OpenCode Go API key";
@@ -769,8 +796,10 @@
     if (save) save.onclick = addToken;
     const start = $("wiz-codex");
     if (start) start.onclick = startCodex;
+    const startAgy = $("wiz-agy");
+    if (startAgy) startAgy.onclick = startAntigravity;
     const submit = $("wiz-callback-go");
-    if (submit) submit.onclick = submitCodexCallback;
+    if (submit) submit.onclick = wizard.provider === "antigravity" ? submitAntigravityCallback : submitCodexCallback;
   }
 
   async function addToken() {
@@ -824,6 +853,56 @@
     } finally {
       busy = false;
       renderWizard();
+    }
+  }
+
+  async function startAntigravity() {
+    if (busy) return;
+    const popup = window.open("about:blank", "_blank");
+    busy = true;
+    wizardMsg("Starting sign-in…", false);
+    renderWizard();
+    try {
+      const body = await api("/api/accounts/antigravity/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ label: wizard.label }),
+      });
+      wizard.sessionId = body.sessionId;
+      wizard.authUrl = body.authUrl;
+      if (body.authUrl) {
+        if (popup) popup.location.replace(body.authUrl);
+        else window.location.assign(body.authUrl);
+      } else {
+        popup?.close();
+      }
+      wizardMsg("Copy the code from the Antigravity page and paste it here.", false);
+    } catch (e) {
+      popup?.close();
+      wizardMsg(e.message, true);
+    } finally {
+      busy = false;
+      renderWizard();
+    }
+  }
+
+  async function submitAntigravityCallback() {
+    if (!wizard.sessionId) return;
+    if (busy) return;
+    busy = true;
+    try {
+      await api("/api/accounts/antigravity/callback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId: wizard.sessionId, url: wizard.callback }),
+      });
+      closeWizard();
+      await load(true);
+    } catch (e) {
+      wizardMsg(e.message, true);
+      renderWizard();
+    } finally {
+      busy = false;
     }
   }
 

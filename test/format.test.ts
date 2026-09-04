@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { accountDisplayName, clampPercent, epochToIso, formatDuration, formatHostname, formatPercent, formatPlan, formatResetIn, isGenericAccountLabel, semverGt, severity, slugify, windowLabel } from "../src/format.ts";
 import { detectPackageManager, upgradeCommand } from "../src/update.ts";
-import { TAILSCALE_NOTE, reachableUrls } from "../src/server.ts";
+import { reachableUrls } from "../src/server.ts";
 
 describe("semver", () => {
   test("compares releases and prereleases", () => {
@@ -111,6 +111,6 @@ describe("server urls", () => {
   });
   test("tailscale url is listed only when the CLI is authed", () => {
     const urls = reachableUrls("0.0.0.0", 5757, "100.65.58.114");
-    expect(urls.some((u) => u.kind === "tailscale" && u.url === "http://100.65.58.114:5757" && u.note === TAILSCALE_NOTE)).toBe(true);
+    expect(urls.some((u) => u.kind === "tailscale" && u.url === "http://100.65.58.114:5757")).toBe(true);
   });
 });

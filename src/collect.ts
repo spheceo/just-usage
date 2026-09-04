@@ -25,7 +25,7 @@ export async function detectProviders(): Promise<ProviderPresence[]> {
 /** Default (CLI-owned) account plus any accounts the user added for this provider. */
 export function resolveAccounts(provider: ProviderId, installed: boolean): ResolvedAccount[] {
   const out: ResolvedAccount[] = [];
-  // Cursor and Codex/Claude default accounts need the CLI. OpenCode's key file can exist without the binary.
+  // Most defaults need the CLI. OpenCode's key file can exist without the binary.
   if (installed || provider === "opencode") {
     out.push({ id: `${provider}:default`, provider, label: "Default", kind: "default" });
   }

@@ -22,3 +22,11 @@ Release with `bun run release` (defaults to patch) or `bun run release patch`.
 ```
 
 Each line is a commit since the previous release tag. `#sha` links to that commit. The GitHub Release title is `vX.Y.Z`. Do not invent PR numbers or add a committer.
+
+## Commits
+
+Do not add a `Co-authored-by` trailer, or any other co-author. Cursor/T3 wrappers re-inject it on `git commit` — use `git commit-tree` so the message stays exactly what we wrote.
+
+## Releases
+
+After `bun run release` pushes the tag, stay with the GitHub Actions run until it finishes. Confirm the GitHub Release body and that `npm view just-usage version` matches the tag. Then `git pull --ff-only origin main` so the local tree matches the release commit and the next change does not diverge.

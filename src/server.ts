@@ -4,11 +4,15 @@ import {
   AccountError,
   addClaudeToken,
   addOpenCodeKey,
+  antigravitySessionStatus,
+  beginAntigravityAdd,
+  beginAntigravityRelogin,
   beginCodexAdd,
   beginCodexRelogin,
   codexSessionStatus,
   removeExtraAccount,
   renameExtraAccount,
+  submitAntigravityCallback,
   submitCodexCallback,
 } from "./accounts.ts";
 import { ReportCache } from "./collect.ts";
@@ -16,6 +20,7 @@ import { CACHE_TTL_MS, VERSION } from "./config.ts";
 import { run } from "./proc.ts";
 import type { ProviderId, UpdateInfo } from "./types.ts";
 import indexHtml from "./ui/index.html" with { type: "text" };
+import antigravityLogo from "./ui/logos/antigravity.svg" with { type: "text" };
 import claudeLogo from "./ui/logos/claude.svg" with { type: "text" };
 import codexLogo from "./ui/logos/codex.svg" with { type: "text" };
 import cursorLogo from "./ui/logos/cursor.svg" with { type: "text" };
@@ -26,6 +31,7 @@ const LOGOS: Record<string, string> = {
   codex: codexLogo,
   cursor: cursorLogo,
   opencode: opencodeLogo,
+  antigravity: antigravityLogo,
 };
 
 export interface ServerOptions {
@@ -129,7 +135,27 @@ export async function startServer(opts: ServerOptions): Promise<{ close: () => v
           json(res, 200, await mutated(() => addOpenCodeKey(secret, label)));
           return;
         }
-        json(res, 400, { error: "Add Claude with a setup-token, OpenCode with an API key, or start a Codex sign-in." });
+        json(res, 400, { error: "Add Claude with a setup-token, OpenCode with an API key, or start a Codex / Antigravity sign-in." });
+        return;
+      }
+      if (url.pathname === "/api/accounts/antigravity/start" && method === "POST") {
+        const body = await readJson(req);
+        const accountId = str(body.accountId);
+        json(
+          res,
+          200,
+          accountId ? await beginAntigravityRelogin(accountId) : await beginAntigravityAdd(str(body.label) || undefined),
+        );
+        return;
+      }
+      if (url.pathname === "/api/accounts/antigravity/callback" && method === "POST") {
+        const body = await readJson(req);
+        json(res, 200, { ok: true, account: await mutated(() => submitAntigravityCallback(str(body.sessionId), str(body.url))) });
+        return;
+      }
+      const agySession = url.pathname.match(/^\/api\/accounts\/antigravity\/session\/([^/]+)$/);
+      if (agySession && (method === "GET" || method === "HEAD")) {
+        json(res, 200, antigravitySessionStatus(decodeURIComponent(agySession[1]!)));
         return;
       }
       if (url.pathname === "/api/accounts/codex/start" && method === "POST") {
@@ -198,12 +224,9 @@ function isTailscale(ip: string): boolean {
   return a === 100 && b !== undefined && b >= 64 && b <= 127;
 }
 
-export const TAILSCALE_NOTE = "Tailscale only. Not same-Wi-Fi. Other devices need Tailscale too.";
-
 export interface ListedUrl {
   kind: "local" | "network" | "tailscale";
   url: string;
-  note?: string;
 }
 
 /** Logged-in Tailscale IPv4, or null if the CLI isn't installed / isn't authed. */
@@ -242,7 +265,7 @@ export function reachableUrls(host: string, port: number, tailscaleIp: string | 
     }
   }
   if (tailscaleIp) {
-    urls.push({ kind: "tailscale", url: `http://${tailscaleIp}:${port}`, note: TAILSCALE_NOTE });
+    urls.push({ kind: "tailscale", url: `http://${tailscaleIp}:${port}` });
   }
   return urls;
 }

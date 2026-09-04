@@ -3,7 +3,7 @@ import { parseArgs } from "node:util";
 import { createInterface } from "node:readline";
 import { codexLogin } from "./adapters/codex.ts";
 import { claudeAuthStatus } from "./adapters/claude.ts";
-import { addClaudeToken, addOpenCodeKey, removeExtraAccount, saveCodexProfile } from "./accounts.ts";
+import { addClaudeToken, addOpenCodeKey, beginAntigravityAdd, removeExtraAccount, saveCodexProfile, submitAntigravityCallback } from "./accounts.ts";
 import { collectReport } from "./collect.ts";
 import { DEFAULT_HOST, DEFAULT_PORT, PACKAGE_NAME, VERSION, ensureDir } from "./config.ts";
 import { openInBrowser, runInteractive, which } from "./proc.ts";
@@ -24,7 +24,7 @@ Usage
       --no-open                  Don't open a browser
   just-usage status [--json]     Print quotas in the terminal
   just-usage accounts            List accounts
-  just-usage add <provider>      Add an account (codex | claude | opencode)
+  just-usage add <provider>      Add an account (codex | claude | opencode | antigravity)
       --label <name>             Friendly name
       --token                    Claude only: paste a \`claude setup-token\` instead of a profile login
   just-usage login <account-id>  Re-authenticate a profile account
@@ -34,6 +34,7 @@ Usage
 
 Providers: ${PROVIDERS.map((p) => p.name).join(", ")}
 Cursor uses whatever \`cursor-agent\` is logged in as (single account).
+Antigravity extras are extra Google logins; they do not replace \`agy\`'s signed-in account.
 `;
 
 function fail(msg: string, code = 1): never {
@@ -105,7 +106,7 @@ async function cmdServe(argv: string[]) {
   console.log(`${PACKAGE_NAME} v${VERSION}`);
   for (const u of server.urls) {
     const tag = u.kind === "local" ? "local    " : u.kind === "tailscale" ? "tailscale" : "network  ";
-    console.log(`  ${tag} ${u.url}${u.note ? ` — ${u.note}` : ""}`);
+    console.log(`  ${tag} ${u.url}`);
   }
   console.log(`\nPress Ctrl+C to stop.`);
   if (shouldOpen) openInBrowser(server.urls[0]!.url);
@@ -131,9 +132,9 @@ async function cmdStatus(argv: string[]) {
 
 function cmdAccounts() {
   const rows = listAccounts();
-  console.log("Default accounts come from each CLI's own login (codex login, claude /login, cursor-agent login, opencode auth login).");
+  console.log("Default accounts come from each CLI's own login (codex login, claude /login, cursor-agent login, opencode auth login, agy).");
   if (rows.length === 0) {
-    console.log("\nNo extra accounts. Add one with: just-usage add codex | claude | opencode");
+    console.log("\nNo extra accounts. Add one with: just-usage add codex | claude | opencode | antigravity");
     return;
   }
   console.log("");
@@ -203,7 +204,7 @@ async function cmdAdd(argv: string[]) {
     allowPositionals: true,
   });
   const provider = positionals[0];
-  if (!isProvider(provider)) fail(`Usage: just-usage add <codex|claude|opencode> [--label name] [--token]`);
+  if (!isProvider(provider)) fail(`Usage: just-usage add <codex|claude|opencode|antigravity> [--label name] [--token]`);
   switch (provider) {
     case "codex":
       return addCodex(values.label);
@@ -211,8 +212,24 @@ async function cmdAdd(argv: string[]) {
       return values.token ? addClaudeTokenCli(values.label) : addClaudeProfile(values.label);
     case "opencode":
       return addOpenCodeCli(values.label);
+    case "antigravity":
+      return addAntigravityCli(values.label);
     case "cursor":
       fail("Cursor is single-account: just-usage shows whatever `cursor-agent` is logged in as.");
+  }
+}
+
+async function addAntigravityCli(label: string | undefined) {
+  const { sessionId, authUrl } = await beginAntigravityAdd(label);
+  console.log(`\nOpen this URL to sign in (opening your browser):\n${authUrl}\n`);
+  openInBrowser(authUrl);
+  console.log("After Google sign-in, copy the code from the Antigravity page (or paste the callback URL).");
+  const callback = await prompt("Code: ");
+  try {
+    const account = await submitAntigravityCallback(sessionId, callback);
+    console.log(`Added ${account.id}${account.email ? ` (${account.email})` : ""}.`);
+  } catch (e) {
+    fail(e instanceof Error ? e.message : String(e));
   }
 }
 
