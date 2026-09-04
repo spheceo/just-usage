@@ -1,6 +1,6 @@
 name: release
 
-# Triggered by `bun run release <bump>` pushing a v* tag.
+# Triggered by `bun run release` (patch by default) pushing a v* tag.
 # Publishes to npm via trusted publishing (OIDC; no NPM_TOKEN needed once the
 # repo is configured as a trusted publisher for the package), then creates the
 # GitHub Release that `just-usage upgrade` checks against.

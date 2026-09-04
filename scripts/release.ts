@@ -1,6 +1,8 @@
 /**
  * Cut a release without extra tooling:
- *   bun run release patch|minor|major|<x.y.z> [--dry]
+ *   bun run release [patch|minor|major|<x.y.z>] [--dry]
+ *
+ * Defaults to patch (0.0.X). Do not use minor/major unless the user asks.
  *
  * 1. requires a clean tree on `main`
  * 2. bumps package.json, runs typecheck + tests + build
@@ -12,11 +14,7 @@ import { spawnSync } from "node:child_process";
 
 const args = process.argv.slice(2);
 const dry = args.includes("--dry");
-const bump = args.find((a) => !a.startsWith("--"));
-if (!bump) {
-  console.error("usage: bun run release patch|minor|major|<x.y.z> [--dry]");
-  process.exit(1);
-}
+const bump = args.find((a) => !a.startsWith("--")) ?? "patch";
 
 function sh(cmd: string, cmdArgs: string[], opts: { capture?: boolean; allowFail?: boolean } = {}): string {
   if (dry && !opts.capture) {
