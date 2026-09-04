@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.0.5
+
+## What's Changed
+Add just-usage stop so a leftover server can be shut down from another terminal. in [#2f8bd3b](https://github.com/spheceo/just-usage/commit/2f8bd3bd5e6125567980508fa244903092256237)
+Show Antigravity plan names and auto-enable new signed-in CLIs. in [#274220c](https://github.com/spheceo/just-usage/commit/274220c08d2a89231bcc74e30349edadeeffc29d)
+Treat Antigravity 403 as no subscription and tidy the Options form. in [#6861089](https://github.com/spheceo/just-usage/commit/68610893dc545232f89a80bbdb8062f4b710a167)
+Add Grok quotas and keep tabs off until a provider has live allowance. in [#4949eee](https://github.com/spheceo/just-usage/commit/4949eee41e2180694740245bf929d1c981477807)
+Add Antigravity quotas from the agy CLI and extra Google logins. in [#9f4b748](https://github.com/spheceo/just-usage/commit/9f4b7484bc9a2247b65d9293f16b6c02dd1289ef)
+Drop the version line from release notes and heading What's Changed in [#3bdc014](https://github.com/spheceo/just-usage/commit/3bdc014f6ad9e961a67f869bf3cb50d63fa8eaf7)
+
 ## v0.0.4
 
 ## What's Changed
