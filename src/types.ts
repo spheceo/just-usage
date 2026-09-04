@@ -17,6 +17,8 @@ export type WindowKind = "rolling" | "cycle";
 export interface QuotaWindow {
   id: string;
   label: string;
+  /** Optional heading rendered above this window (e.g. Grok Bot). */
+  group?: string;
   /** Percent of the window already used, 0-100. null when the provider did not say. */
   usedPercent: number | null;
   /** ISO-8601 instant when the window resets. null when unknown. */

@@ -1,3 +1,4 @@
+import { formatPlan } from "../format.ts";
 import type { QuotaSnapshot, ResolvedAccount, SnapshotStatus } from "../types.ts";
 
 export function snapshot(
@@ -12,7 +13,7 @@ export function snapshot(
       provider: account.provider,
       label: account.label,
       email: email ?? account.email ?? null,
-      plan: plan ?? null,
+      plan: formatPlan(plan) ?? null,
       kind: account.kind,
     },
     status,

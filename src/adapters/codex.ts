@@ -204,34 +204,65 @@ export async function fetchCodex(account: ResolvedAccount): Promise<QuotaSnapsho
   }
 }
 
+export interface CodexLoginHandle {
+  authUrl: string;
+  completed: Promise<{ email: string | null; plan: string | null }>;
+  close: () => void;
+}
+
+/** Start a ChatGPT OAuth login inside an isolated CODEX_HOME. Caller waits on `completed` or closes. */
+export async function startCodexLogin(codexHome: string, timeoutMs = 5 * 60_000): Promise<CodexLoginHandle> {
+  const client = await AppServerClient.start(codexHome);
+  let closed = false;
+  const close = () => {
+    if (closed) return;
+    closed = true;
+    client.close();
+  };
+  const completed = new Promise<{ email: string | null; plan: string | null }>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("login timed out")), timeoutMs);
+    client.onNotification(async (n) => {
+      if (n.method !== "account/login/completed") return;
+      clearTimeout(timer);
+      const p = isObject(n.params) ? n.params : {};
+      if (!p.success) {
+        reject(new Error(typeof p.error === "string" ? p.error : "login failed"));
+        return;
+      }
+      try {
+        const acct = await client.request<JsonObject>("account/read", {});
+        const info = isObject(acct.account) ? acct.account : {};
+        resolve({
+          email: typeof info.email === "string" ? info.email : null,
+          plan: typeof info.planType === "string" ? info.planType : null,
+        });
+      } catch (e) {
+        reject(e instanceof Error ? e : new Error(String(e)));
+      }
+    });
+  }).finally(close);
+  try {
+    const start = await client.request<JsonObject>("account/login/start", { type: "chatgpt" });
+    if (typeof start.authUrl !== "string" || !start.authUrl) throw new Error("Codex did not return an auth URL.");
+    return { authUrl: start.authUrl, completed, close };
+  } catch (e) {
+    close();
+    throw e;
+  }
+}
+
 /** Drive a ChatGPT OAuth login inside an isolated CODEX_HOME. Resolves with the account info. */
 export async function codexLogin(
   codexHome: string,
   onAuthUrl: (url: string) => void,
   timeoutMs = 5 * 60_000,
 ): Promise<{ email: string | null; plan: string | null }> {
-  const client = await AppServerClient.start(codexHome);
+  const handle = await startCodexLogin(codexHome, timeoutMs);
+  onAuthUrl(handle.authUrl);
   try {
-    const completed = new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error("login timed out")), timeoutMs);
-      client.onNotification((n) => {
-        if (n.method !== "account/login/completed") return;
-        clearTimeout(timer);
-        const p = isObject(n.params) ? n.params : {};
-        if (p.success) resolve();
-        else reject(new Error(typeof p.error === "string" ? p.error : "login failed"));
-      });
-    });
-    const start = await client.request<JsonObject>("account/login/start", { type: "chatgpt" });
-    if (typeof start.authUrl === "string") onAuthUrl(start.authUrl);
-    await completed;
-    const acct = await client.request<JsonObject>("account/read", {});
-    const info = isObject(acct.account) ? acct.account : {};
-    return {
-      email: typeof info.email === "string" ? info.email : null,
-      plan: typeof info.planType === "string" ? info.planType : null,
-    };
-  } finally {
-    client.close();
+    return await handle.completed;
+  } catch (e) {
+    handle.close();
+    throw e;
   }
 }

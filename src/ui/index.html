@@ -30,39 +30,48 @@
   .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-variant-numeric: tabular-nums; }
   .wrap { max-width: 820px; margin: 0 auto; padding: 44px 20px 64px; }
 
-  header { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 26px; gap: 16px; }
+  header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 22px; gap: 16px; }
   h1 { font-size: 15px; font-weight: 500; letter-spacing: .01em; margin: 0; }
   h1 span { color: var(--dim); font-weight: 400; margin-left: 8px; }
   .meta { color: var(--muted); font-size: 12px; display: flex; gap: 14px; align-items: center; }
-  button.refresh {
+  button.opts-btn {
+    display: inline-flex; align-items: center; gap: 6px;
     background: transparent; color: var(--fg); border: 1px solid var(--line-2); border-radius: 6px;
     padding: 5px 11px; font: inherit; font-size: 12px; cursor: pointer;
   }
-  button.refresh:hover { border-color: #3a3a3a; }
-  button.refresh[disabled] { opacity: .45; cursor: default; }
+  button.opts-btn:hover { border-color: #3a3a3a; }
+  button.opts-btn svg { width: 13px; height: 13px; display: block; flex: none; }
+  button.opts-btn .icon-back { display: none; }
+  button.opts-btn.back .icon-gear { display: none; }
+  button.opts-btn.back .icon-back { display: block; }
 
-  /* Chrome-style tab strip */
-  .tabs { display: flex; gap: 2px; padding: 0 8px; position: relative; z-index: 1; }
+  .tabs {
+    display: flex; gap: 4px; flex-wrap: wrap;
+    border-bottom: 1px solid var(--line);
+    margin: 0 0 16px; padding: 0;
+  }
   .tab {
-    position: relative; background: transparent; border: 1px solid transparent; border-bottom: none;
-    border-radius: 10px 10px 0 0; color: var(--muted); padding: 9px 16px 9px 14px; cursor: pointer;
-    font: inherit; font-size: 13px; display: flex; gap: 9px; align-items: center; user-select: none;
-    transition: color .12s;
+    background: none; border: none; border-bottom: 2px solid transparent;
+    color: var(--muted); padding: 9px 12px 10px; margin-bottom: -1px; cursor: pointer;
+    font: inherit; font-size: 13px; display: flex; gap: 8px; align-items: center; user-select: none;
   }
-  .tab:hover { color: var(--fg); background: #060606; }
-  .tab.active { background: var(--surface); border-color: var(--line); color: var(--fg); margin-bottom: -1px; padding-bottom: 10px; }
-  .tab.active::before, .tab.active::after {
-    content: ""; position: absolute; bottom: 0; width: 10px; height: 10px; background: var(--surface);
-  }
-  .tab.active::before { left: -10px; -webkit-mask: radial-gradient(circle at 0 0, transparent 10px, #000 10.5px); mask: radial-gradient(circle at 0 0, transparent 10px, #000 10.5px); }
-  .tab.active::after { right: -10px; -webkit-mask: radial-gradient(circle at 100% 0, transparent 10px, #000 10.5px); mask: radial-gradient(circle at 100% 0, transparent 10px, #000 10.5px); }
-  .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--dim); flex: none; }
-  .dot.ok { background: var(--ok); } .dot.warn { background: var(--warn); } .dot.crit { background: var(--crit); }
+  .tab:hover { color: var(--fg); }
+  .tab.active { color: var(--fg); border-bottom-color: var(--fg); }
+  .tab img.logo { width: 14px; height: 14px; display: block; flex: none; opacity: .55; }
+  .tab.active img.logo, .tab:hover img.logo { opacity: 1; }
   .tab .n { color: var(--dim); font-size: 11px; }
 
   .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; min-height: 160px; }
+  .panel.cards {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: stretch;
+    background: transparent; border: none; min-height: 0;
+  }
   .card { padding: 18px 18px 20px; border-bottom: 1px solid var(--line); }
   .card:last-child { border-bottom: none; }
+  .panel.cards .card {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+    border-bottom: 1px solid var(--line); min-width: 0; height: 100%;
+  }
   .card-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
   .label { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .plan { color: var(--muted); font-size: 12px; text-transform: capitalize; margin-left: 8px; font-weight: 400; }
@@ -71,28 +80,147 @@
   .badge.warn { color: var(--warn); border-color: rgba(245,197,66,.35); }
 
   .win { margin-top: 14px; }
-  .win-row { display: flex; justify-content: space-between; align-items: baseline; font-size: 12px; color: var(--muted); margin-bottom: 7px; gap: 12px; }
+  .win-group {
+    margin: 28px 0 0; font-size: 16px; font-weight: 500; color: var(--fg);
+  }
+  .win-group + .win { margin-top: 14px; }
+  .win-row { display: flex; justify-content: space-between; align-items: baseline; font-size: 12px; color: var(--muted); margin-bottom: 8px; gap: 12px; }
   .win-row b { color: var(--fg); font-weight: 500; }
   .win-row .pct { color: var(--fg); }
   .win-row .pct.warn { color: var(--warn); } .win-row .pct.crit { color: var(--crit); }
-  .track { height: 4px; background: var(--line); border-radius: 2px; overflow: hidden; }
-  .fill { height: 100%; border-radius: 2px; background: var(--ok); width: 0; transition: width .5s cubic-bezier(.2,.7,.2,1); }
+  .track { height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; }
+  .fill { height: 100%; border-radius: 3px; background: var(--ok); width: 0; transition: width .5s cubic-bezier(.2,.7,.2,1); }
   .fill.warn { background: var(--warn); } .fill.crit { background: var(--crit); }
+  .fill.sliver { min-width: 8px; }
   .note { color: var(--dim); font-size: 11px; margin-top: 5px; }
 
   .msg { color: var(--muted); font-size: 13px; margin-top: 6px; }
   .empty { padding: 46px 18px; color: var(--muted); text-align: center; font-size: 13px; }
   .hint { color: var(--dim); font-size: 12px; margin-top: 8px; }
   code { font-family: ui-monospace, Menlo, Consolas, monospace; background: #121212; padding: 1px 6px; border-radius: 4px; font-size: 12px; color: var(--fg); }
-  .credits { font-size: 12px; color: var(--muted); margin-top: 16px; padding-top: 12px; border-top: 1px dashed var(--line); }
+  .credits {
+    display: flex; justify-content: space-between; align-items: baseline; gap: 12px;
+    margin-top: 16px; padding-top: 14px; border-top: 1px dashed var(--line);
+    font-size: 12px;
+  }
+  .credits b { color: var(--fg); font-weight: 500; }
+  .credits-avail {
+    position: relative; color: var(--muted); cursor: help;
+    border-bottom: 1px dotted var(--dim);
+  }
+  .credits-avail:hover, .credits-avail:focus-visible { color: var(--fg); }
+  .credits-tip {
+    display: none; position: absolute; right: 0; bottom: calc(100% + 8px);
+    min-width: 240px; padding: 8px 10px;
+    background: var(--surface); border: 1px solid var(--line-2); border-radius: 8px;
+    color: var(--muted); font-size: 11px; line-height: 1.45; white-space: nowrap; z-index: 5;
+  }
+  .credits-avail:hover .credits-tip, .credits-avail:focus-visible .credits-tip { display: block; }
+  .credits-tip-row { display: flex; align-items: baseline; gap: 12px; }
+  .credits-tip-row + .credits-tip-row { margin-top: 6px; }
+  .credits-tip-n { color: var(--fg); font-variant-numeric: tabular-nums; min-width: 1em; }
+  .credits-tip-date { color: var(--fg); flex: 1; }
+  .credits-tip-left { color: var(--dim); font-variant-numeric: tabular-nums; margin-left: auto; }
+
+  #dash[hidden], #settings[hidden] { display: none; }
+  .settings { display: flex; flex-direction: column; gap: 22px; }
+  .opts-label { font-size: 11px; color: var(--dim); letter-spacing: .04em; text-transform: uppercase; margin-bottom: 8px; }
+  .opts-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 0; user-select: none; }
+  .opts-row.dragging {
+    background: var(--surface); border: 1px solid var(--line-2); border-radius: 8px; padding: 6px 8px;
+  }
+  .opts-prov { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .opts-row img.logo { width: 14px; height: 14px; }
+  .grip {
+    width: 10px; height: 14px; flex: none; cursor: grab; touch-action: none;
+    background-image: radial-gradient(circle, var(--dim) 1px, transparent 1.2px);
+    background-size: 5px 5px; background-position: 0 1px;
+  }
+  .grip:active { cursor: grabbing; }
+  .chk {
+    appearance: none; -webkit-appearance: none;
+    width: 15px; height: 15px; margin: 0; padding: 0;
+    border: 1px solid var(--line-2); border-radius: 4px;
+    background: transparent; cursor: pointer; flex: none;
+    display: grid; place-items: center;
+  }
+  .chk:hover { border-color: var(--muted); }
+  .chk:checked { background: var(--fg); border-color: var(--fg); }
+  .chk:checked::after {
+    content: ""; width: 7px; height: 4px;
+    border-left: 1.5px solid var(--bg);
+    border-bottom: 1.5px solid var(--bg);
+    transform: translateY(-1px) rotate(-45deg);
+  }
+  .opts-inline { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .opts-inline .opts-label { margin: 0; }
+  .opts-inline.tight { margin-bottom: 8px; }
+  .seg { display: inline-flex; border: 1px solid var(--line-2); border-radius: 6px; overflow: hidden; width: auto; }
+  .seg label { text-align: center; font-size: 11px; padding: 3px 8px; color: var(--muted); cursor: pointer; }
+  .seg input { appearance: none; position: absolute; }
+  .seg label:has(input:checked) { background: #121212; color: var(--fg); }
+  .opts-actions { display: flex; justify-content: flex-end; align-items: center; gap: 12px; padding-top: 2px; }
+  .opts-actions:has(#opts-signed-in:not([hidden])) { justify-content: space-between; }
+  .opts-link { background: none; border: none; color: var(--muted); font: inherit; font-size: 12px; cursor: pointer; padding: 0; }
+  .opts-link:hover { color: var(--fg); }
+  .opts-link[hidden] { display: none; }
+  .acct-group { padding-bottom: 12px; }
+  .acct-group + .acct-group { border-top: 1px solid var(--line); padding-top: 12px; }
+  .acct-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 13px; }
+  .acct-head img.logo { width: 14px; height: 14px; }
+  .acct-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 5px 0; font-size: 13px; }
+  .acct-actions { display: flex; align-items: center; gap: 10px; flex: none; }
+  .acct-row .acct-actions { opacity: 0; }
+  .acct-row:hover .acct-actions, .acct-row:focus-within .acct-actions { opacity: 1; }
+  .dlg-body .acct-actions { justify-content: space-between; width: 100%; }
+  .acct-meta { color: var(--dim); font-size: 12px; margin-left: 8px; }
+  .acct-rename { display: flex; gap: 8px; flex: 1; min-width: 0; }
+  dialog.dlg {
+    width: min(420px, calc(100vw - 32px));
+    background: var(--surface); color: var(--fg);
+    border: 1px solid var(--line); border-radius: 12px;
+    padding: 0;
+  }
+  dialog.dlg::backdrop { background: rgba(0, 0, 0, .9); }
+  .dlg-head {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 14px 16px; border-bottom: 1px solid var(--line);
+  }
+  .dlg-head strong { font-weight: 500; font-size: 13px; }
+  .dlg-body { padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 12px; }
+  .pick { display: flex; flex-direction: column; gap: 6px; }
+  .pick-btn {
+    display: flex; align-items: center; gap: 10px;
+    background: transparent; color: var(--fg); border: 1px solid var(--line-2); border-radius: 8px;
+    padding: 8px 10px; font: inherit; font-size: 13px; cursor: pointer; text-align: left;
+  }
+  .pick-btn:hover { border-color: #3a3a3a; }
+  .pick-btn img.logo { width: 14px; height: 14px; }
+  .field {
+    background: #121212; color: var(--fg); border: 1px solid var(--line-2); border-radius: 6px;
+    padding: 6px 10px; font: inherit; font-size: 12px; min-width: 0; flex: 1;
+  }
+  .field:focus { outline: none; border-color: var(--muted); }
+  .acct-note { color: var(--dim); font-size: 12px; }
+  .acct-msg { color: var(--muted); font-size: 12px; }
+  .acct-msg.err { color: var(--crit); }
+  .acct-oauth { display: flex; flex-direction: column; gap: 8px; }
+  .acct-url { font-size: 12px; color: var(--fg); word-break: break-all; }
+  .acct-url a { color: var(--fg); }
+  button.refresh {
+    background: transparent; color: var(--fg); border: 1px solid var(--line-2); border-radius: 6px;
+    padding: 5px 11px; font: inherit; font-size: 12px; cursor: pointer;
+  }
+  button.refresh:hover { border-color: #3a3a3a; }
+  button.refresh[disabled] { opacity: .45; cursor: default; }
 
   footer { margin-top: 26px; color: var(--dim); font-size: 12px; display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
   footer .update { color: var(--warn); }
-  footer kbd { font-family: inherit; color: var(--dim); }
   @media (max-width: 520px) {
     .wrap { padding: 28px 12px 48px; }
-    .tab { padding: 8px 11px; font-size: 12px; }
+    .tab { padding: 8px 10px; font-size: 12px; }
     .tab .n { display: none; }
+    .panel.cards { grid-template-columns: 1fr; }
   }
 </style>
 </head>
@@ -101,17 +229,55 @@
   <header>
     <h1>just-usage<span id="host"></span></h1>
     <div class="meta">
-      <span id="updated" class="mono"></span>
-      <button class="refresh" id="refresh" type="button">Refresh</button>
+      <span id="updated"></span>
+      <button class="opts-btn" id="opts-btn" type="button"><svg class="icon-gear" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg><svg class="icon-back" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18 9 12l6-6"/><path d="M9 12h12"/></svg><span id="opts-label">Options</span></button>
     </div>
   </header>
+  <div id="dash">
   <nav class="tabs" id="tabs" role="tablist"></nav>
   <section class="panel" id="panel" role="tabpanel"><div class="empty">Loading…</div></section>
+  </div>
+  <div id="settings" class="settings" hidden>
+    <div>
+      <div class="opts-label">Providers</div>
+      <div id="opts-providers"></div>
+    </div>
+    <div class="opts-inline">
+      <div class="opts-label">Meters</div>
+      <div class="seg" id="opts-meter">
+        <label><input type="radio" name="meter" value="left" checked> Left</label>
+        <label><input type="radio" name="meter" value="used"> Used</label>
+      </div>
+    </div>
+    <label class="opts-row" for="opts-email">
+      <span>Show email on accounts</span>
+      <input class="chk" id="opts-email" type="checkbox">
+    </label>
+    <div>
+      <div class="opts-inline tight">
+        <div class="opts-label">Accounts</div>
+        <button class="refresh" id="acct-add" type="button">Add account</button>
+      </div>
+      <div id="opts-accounts"></div>
+    </div>
+    <div class="opts-actions">
+      <button class="opts-link" id="opts-signed-in" type="button">Signed-in only</button>
+      <button class="refresh" id="refresh" type="button">Refresh data</button>
+    </div>
+  </div>
   <footer>
     <span id="version"></span>
     <span id="update"></span>
   </footer>
 </div>
+
+<dialog class="dlg" id="add-acct">
+  <div class="dlg-head">
+    <strong id="add-acct-title">Add account</strong>
+    <button class="opts-link" id="add-acct-close" type="button">Close</button>
+  </div>
+  <div class="dlg-body" id="add-acct-body"></div>
+</dialog>
 
 <script>
 (() => {
@@ -129,15 +295,69 @@
   };
   const $ = (id) => document.getElementById(id);
   let report = null;
-  const wanted = new URLSearchParams(location.search).get("tab");
+  try {
+    const cached = JSON.parse(localStorage.getItem("ju.report"));
+    if (cached && Array.isArray(cached.providers)) report = cached;
+  } catch {}
+  const params = new URLSearchParams(location.search);
+  const wanted = params.get("tab");
   let active = PROVIDERS.some(([id]) => id === wanted) ? wanted : localStorage.getItem("ju.tab") || "claude";
+  let settingsOpen = params.get("view") === "settings";
   let loading = false;
+  let busy = false;
+  let showEmail = localStorage.getItem("ju.showEmail") === "1";
+  let aliases = {};
+  try {
+    const raw = JSON.parse(localStorage.getItem("ju.aliases"));
+    if (raw && typeof raw === "object") aliases = raw;
+  } catch {}
+  let renaming = null;
+  let wizard = { step: "provider", provider: "", label: "", secret: "", sessionId: "", authUrl: "", callback: "", msg: "", err: false };
+  let codexPoll = 0;
+  let enabled = null;
+  try {
+    const raw = JSON.parse(localStorage.getItem("ju.providers"));
+    if (raw && typeof raw === "object") enabled = raw;
+  } catch {}
+  let dragging = false;
+  let showLeft = localStorage.getItem("ju.showLeft") !== "0";
+  let order = PROVIDERS.map(([id]) => id);
+  try {
+    const raw = JSON.parse(localStorage.getItem("ju.order"));
+    if (Array.isArray(raw)) {
+      const known = new Set(order);
+      const next = raw.filter((id) => known.has(id));
+      for (const id of order) if (!next.includes(id)) next.push(id);
+      order = next;
+    }
+  } catch {}
 
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-  // Escape, then turn `backticked` spans into <code>.
   const rich = (s) => esc(s).replace(/`([^`]+)`/g, "<code>$1</code>");
   const sev = (p) => (p == null ? null : p >= 85 ? "crit" : p >= 60 ? "warn" : "ok");
   const rank = { ok: 1, warn: 2, crit: 3 };
+  const logo = (id) => `<img class="logo" src="/logos/${id}.svg?v=2" alt="" width="14" height="14">`;
+  const formatPlan = (p) => String(p).replace(/\S+/g, (w) => w.charAt(0).toUpperCase() + w.slice(1));
+  const GENERIC_LABELS = new Set(["", "default", "token", "go", "pending", "profile", "account", "codex"]);
+  function isGenericLabel(label, email) {
+    const s = String(label ?? "").trim();
+    if (!s) return true;
+    if (email && s === email) return true;
+    return GENERIC_LABELS.has(s.toLowerCase());
+  }
+  function accountTitle(a, index) {
+    if (showEmail && a.account.email) return a.account.email;
+    const alias = String(aliases[a.account.id] || "").trim();
+    if (alias) return alias;
+    if (a.account.kind === "default" || /^default$/i.test(String(a.account.label || "").trim())) return "Default";
+    if (!isGenericLabel(a.account.label, a.account.email)) return String(a.account.label).trim();
+    return `Account ${index + 1}`;
+  }
+  function formatPercent(used) {
+    if (used == null) return "—";
+    const tenth = Math.round(Math.min(100, Math.max(0, used)) * 10) / 10;
+    return Number.isInteger(tenth) ? `${tenth}%` : `${tenth.toFixed(1)}%`;
+  }
 
   function fmtDuration(ms) {
     const min = Math.round(ms / 60000);
@@ -157,31 +377,80 @@
     }
     return diff <= 0 ? "resetting" : `resets in ${fmtDuration(diff)}`;
   }
-  function fmtTime(iso) {
+  function fmtAgo(iso) {
     const t = Date.parse(iso);
-    return isFinite(t) ? new Date(t).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }) : "";
+    if (!isFinite(t)) return "";
+    const sec = Math.max(0, Math.round((Date.now() - t) / 1000));
+    if (sec < 20) return "just now";
+    if (sec < 60) return `${sec} sec ago`;
+    const min = Math.round(sec / 60);
+    if (min < 60) return min === 1 ? "1 min ago" : `${min} min ago`;
+    const hr = Math.round(min / 60);
+    if (hr < 48) return hr === 1 ? "1 hr ago" : `${hr} hr ago`;
+    const d = Math.round(hr / 24);
+    return d === 1 ? "1 day ago" : `${d} days ago`;
   }
 
-  function providerSeverity(p) {
-    if (!p) return null;
-    let worst = null;
-    for (const a of p.accounts) {
-      if (a.status !== "ok") continue;
-      for (const w of a.windows) {
-        const s = sev(w.usedPercent);
-        if (s && (!worst || rank[s] > rank[worst])) worst = s;
-      }
-    }
-    return worst;
+  function isSignedIn(p) {
+    return !!p?.accounts.some((a) => a.status !== "signed_out");
+  }
+
+  function visibleIds() {
+    if (enabled) return order.filter((id) => enabled[id]);
+    if (!report) return [];
+    return order.filter((id) => isSignedIn(report.providers.find((x) => x.id === id)));
+  }
+
+  function ensureActive() {
+    const vis = visibleIds();
+    if (!vis.length || vis.includes(active)) return;
+    active = vis[0];
+    localStorage.setItem("ju.tab", active);
+  }
+
+  function persistEnabled(next) {
+    enabled = next;
+    if (next) localStorage.setItem("ju.providers", JSON.stringify(next));
+    else localStorage.removeItem("ju.providers");
+    ensureActive();
+    if (settingsOpen) {
+      renderTabs();
+      $("opts-signed-in").hidden = !enabled;
+    } else render();
+  }
+
+  function persistOrder(next) {
+    order = next;
+    localStorage.setItem("ju.order", JSON.stringify(next));
+    ensureActive();
+    if (settingsOpen) renderTabs();
+    else render();
+  }
+
+  function setView(open) {
+    settingsOpen = open;
+    $("dash").hidden = open;
+    $("settings").hidden = !open;
+    const btn = $("opts-btn");
+    $("opts-label").textContent = open ? "Back" : "Options";
+    const q = new URLSearchParams();
+    if (open) q.set("view", "settings");
+    else q.set("tab", active);
+    history.replaceState(null, "", q.toString() ? `?${q}` : location.pathname);
+    if (open) {
+      renderSettings();
+      renderChrome();
+    } else render();
   }
 
   function renderTabs() {
-    $("tabs").innerHTML = PROVIDERS.map(([id, name]) => {
+    const vis = visibleIds();
+    $("tabs").innerHTML = vis.map((id) => {
+      const name = PROVIDERS.find(([x]) => x === id)?.[1] || id;
       const p = report?.providers.find((x) => x.id === id);
-      const s = providerSeverity(p);
       const n = p ? p.accounts.filter((a) => a.status === "ok").length : 0;
       return `<button class="tab${id === active ? " active" : ""}" role="tab" data-id="${id}" aria-selected="${id === active}">
-        <span class="dot${s ? " " + s : ""}"></span>${esc(name)}${n > 1 ? `<span class="n">${n}</span>` : ""}</button>`;
+        ${logo(id)}${esc(name)}${n > 1 ? `<span class="n">${n}</span>` : ""}</button>`;
     }).join("");
     for (const el of $("tabs").querySelectorAll(".tab")) {
       el.onclick = () => { active = el.dataset.id; localStorage.setItem("ju.tab", active); render(); };
@@ -189,21 +458,38 @@
   }
 
   function renderWindow(w) {
-    const s = sev(w.usedPercent);
-    const pct = w.usedPercent == null ? "—" : `${Math.round(w.usedPercent)}%`;
+    const used = w.usedPercent;
+    const shown = showLeft && used != null ? Math.max(0, 100 - used) : used;
+    const s = sev(used);
+    const pct = formatPercent(shown);
+    const word = showLeft ? "left" : "used";
     const reset = fmtReset(w);
+    const bar = shown == null ? 0 : shown;
+    const sliver = shown > 0 && shown < 100;
     return `<div class="win">
       <div class="win-row"><b>${esc(w.label)}</b>
-        <span class="mono"><span class="pct${s ? " " + s : ""}">${pct} used</span>${reset ? ` · ${esc(reset)}` : ""}</span></div>
-      <div class="track"><div class="fill${s ? " " + s : ""}" style="width:${w.usedPercent ?? 0}%"></div></div>
+        <span class="mono"><span class="pct${s ? " " + s : ""}">${pct} ${word}</span>${reset ? ` · ${esc(reset)}` : ""}</span></div>
+      <div class="track"><div class="fill${s ? " " + s : ""}${sliver ? " sliver" : ""}" style="width:${bar}%"></div></div>
       ${w.note ? `<div class="note">${esc(w.note)}</div>` : ""}
     </div>`;
   }
 
-  function renderCard(a, provider) {
-    const title = a.account.email || a.account.label;
-    const sub = a.account.email && a.account.label !== "Default" && a.account.label !== a.account.email ? ` <span class="plan">${esc(a.account.label)}</span>` : "";
-    const plan = a.account.plan ? `<span class="plan">${esc(a.account.plan)}</span>` : "";
+  function renderWindows(windows) {
+    let html = "";
+    let lastGroup = null;
+    for (const w of windows) {
+      if (w.group && w.group !== lastGroup) {
+        html += `<div class="win-group">${esc(w.group)}</div>`;
+        lastGroup = w.group;
+      }
+      html += renderWindow(w);
+    }
+    return html;
+  }
+
+  function renderCard(a, provider, index) {
+    const title = accountTitle(a, index);
+    const plan = a.account.plan ? `<span class="plan">${esc(formatPlan(a.account.plan))}</span>` : "";
     let badge = "";
     if (a.status === "ok") {
       let worst = null;
@@ -211,78 +497,516 @@
       if (worst === "crit") badge = `<span class="badge crit">critical</span>`;
       else if (worst === "warn") badge = `<span class="badge warn">running low</span>`;
     } else {
-      const text = { signed_out: "signed out", unsupported: "unsupported", error: "error" }[a.status] || a.status;
+      const text = { signed_out: "signed out", unsupported: "Unsupported", error: "error" }[a.status] || a.status;
       badge = `<span class="badge">${esc(text)}</span>`;
     }
     let body = "";
     if (a.status === "ok") {
-      body = a.windows.map(renderWindow).join("");
+      body = renderWindows(a.windows);
       if (a.resetCredits && a.resetCredits.availableCount > 0) {
-        const c = a.resetCredits.credits.find((x) => x.status === "available") || a.resetCredits.credits[0];
-        const exp = c && c.expiresAt ? ` · expires ${new Date(c.expiresAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}` : "";
         const n = a.resetCredits.availableCount;
-        body += `<div class="credits">${n} rate-limit reset${n === 1 ? "" : "s"} banked${c && c.title ? ` — ${esc(c.title)}` : ""}${exp}</div>`;
+        const rows = (a.resetCredits.credits || [])
+          .filter((c) => !c.status || c.status === "available")
+          .map((c, i) => {
+            const t = c.expiresAt ? Date.parse(c.expiresAt) : NaN;
+            const day = Number.isFinite(t)
+              ? `${new Date(t).getDate()} ${new Date(t).toLocaleDateString(undefined, { month: "short" })}`
+              : "—";
+            const left = Number.isFinite(t) && t > Date.now() ? fmtDuration(t - Date.now()) : "now";
+            return `<div class="credits-tip-row"><span class="credits-tip-n">${i + 1}</span><span class="credits-tip-date">${esc(day)}</span><span class="credits-tip-left">${esc(left)}</span></div>`;
+          });
+        const tip = rows.length ? `<span class="credits-tip">${rows.join("")}</span>` : "";
+        body += `<div class="credits"><b>Rate Limit Reset</b>
+          <span class="credits-avail" tabindex="0">${n} available${tip}</span></div>`;
       }
     } else {
       body = a.message ? `<div class="msg">${rich(a.message)}</div>` : `<div class="hint">${SIGNIN_HINT[provider] || ""}</div>`;
     }
     return `<article class="card">
-      <div class="card-head"><div class="label">${esc(title)}${sub}${plan}</div>${badge}</div>
+      <div class="card-head"><div class="label">${esc(title)}${plan}</div>${badge}</div>
       ${body}
     </article>`;
   }
 
+  function formatHost(name) {
+    return String(name ?? "").replace(/\.local$/, "").replace(/[-_]+/g, " ").replace(/\s+/g, " ").trim();
+  }
+
   function renderPanel() {
+    $("panel").classList.remove("cards");
+    if (!report) {
+      $("panel").innerHTML = `<div class="empty">Loading…</div>`;
+      return;
+    }
+    const vis = visibleIds();
+    if (vis.length === 0) {
+      $("panel").innerHTML = `<div class="empty">No providers enabled.<div class="hint">Open Options to show one, or add an account there.</div></div>`;
+      return;
+    }
     const p = report?.providers.find((x) => x.id === active);
     const name = PROVIDERS.find(([id]) => id === active)?.[1] || active;
     if (!p) { $("panel").innerHTML = `<div class="empty">Loading…</div>`; return; }
     if (!p.installed && p.accounts.length === 0) {
-      $("panel").innerHTML = `<div class="empty">${esc(name)} isn't installed on ${esc(report.hostname)}.</div>`;
+      $("panel").innerHTML = `<div class="empty">${esc(name)} isn't installed on ${esc(formatHost(report.hostname))}.</div>`;
       return;
     }
     if (p.accounts.length === 0) {
       $("panel").innerHTML = `<div class="empty">No ${esc(name)} accounts.<div class="hint">${SIGNIN_HINT[active] || ""}</div></div>`;
       return;
     }
-    $("panel").innerHTML = p.accounts.map((a) => renderCard(a, active)).join("");
+    $("panel").classList.toggle("cards", p.accounts.length > 1);
+    $("panel").innerHTML = p.accounts.map((a, i) => renderCard(a, active, i)).join("");
   }
 
-  function render() {
-    renderTabs();
-    renderPanel();
+  function renderOptions() {
+    const vis = new Set(visibleIds());
+    $("opts-providers").innerHTML = order.map((id) => {
+      const name = PROVIDERS.find(([x]) => x === id)?.[1] || id;
+      return `<div class="opts-row" data-id="${id}">
+        <span class="opts-prov"><span class="grip" title="Drag to reorder"></span>${logo(id)}${esc(name)}</span>
+        <input class="chk" type="checkbox" data-id="${id}" ${vis.has(id) ? "checked" : ""}>
+      </div>`;
+    }).join("");
+    for (const input of $("opts-providers").querySelectorAll("input")) {
+      input.onchange = () => {
+        const next = Object.fromEntries(order.map((id) => [id, vis.has(id)]));
+        next[input.dataset.id] = input.checked;
+        persistEnabled(next);
+      };
+    }
+    const list = $("opts-providers");
+    for (const grip of list.querySelectorAll(".grip")) {
+      grip.onpointerdown = (e) => {
+        if (e.button !== 0) return;
+        e.preventDefault();
+        const row = grip.closest(".opts-row");
+        dragging = true;
+        row.classList.add("dragging");
+        const place = (clientY) => {
+          const others = [...list.querySelectorAll(".opts-row")].filter((r) => r !== row);
+          const before = others.find((r) => {
+            const b = r.getBoundingClientRect();
+            return clientY < b.top + b.height / 2;
+          });
+          if (before) list.insertBefore(row, before);
+          else list.appendChild(row);
+        };
+        const move = (ev) => place(ev.clientY);
+        const stop = () => {
+          document.removeEventListener("pointermove", move);
+          document.removeEventListener("pointerup", stop);
+          document.removeEventListener("pointercancel", stop);
+          dragging = false;
+          row.classList.remove("dragging");
+          const next = [...list.querySelectorAll(".opts-row")].map((r) => r.dataset.id);
+          if (next.join() !== order.join()) persistOrder(next);
+        };
+        document.addEventListener("pointermove", move);
+        document.addEventListener("pointerup", stop);
+        document.addEventListener("pointercancel", stop);
+      };
+    }
+    $("opts-signed-in").hidden = !enabled;
+    for (const input of $("opts-meter").querySelectorAll("input")) {
+      input.checked = (input.value === "left") === showLeft;
+    }
+    $("opts-email").checked = showEmail;
+    renderAccounts();
+  }
+
+  function wizardMsg(text, err) {
+    wizard.msg = text || "";
+    wizard.err = !!err;
+  }
+
+  async function api(path, opts) {
+    const res = await fetch(path, { cache: "no-store", ...opts });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
+    return body;
+  }
+
+  function renderAccounts() {
+    const host = $("opts-accounts");
+    if (!host) return;
+    host.innerHTML = order.map((id) => {
+      const name = PROVIDERS.find(([x]) => x === id)?.[1] || id;
+      const p = report?.providers.find((x) => x.id === id);
+      const rows = (p?.accounts || []).map((a, i) => {
+        const title = accountTitle(a, i);
+        const extra = a.account.kind === "default" ? "from CLI" : a.account.kind;
+        if (renaming === a.account.id) {
+          return `<div class="acct-row">
+            <span class="acct-rename"><input class="field acct-rename-input" data-id="${esc(a.account.id)}" value="${esc(title)}">
+              <button class="refresh acct-rename-save" type="button" data-id="${esc(a.account.id)}">Save</button></span>
+            <button class="opts-link acct-rename-cancel" type="button">Cancel</button>
+          </div>`;
+        }
+        const rm = a.account.kind !== "default"
+          ? `<button class="opts-link acct-remove" type="button" data-id="${esc(a.account.id)}">Remove</button>`
+          : "";
+        return `<div class="acct-row"><span>${esc(title)}<span class="acct-meta">${esc(extra)}</span></span>
+          <span class="acct-actions"><button class="opts-link acct-rename-btn" type="button" data-id="${esc(a.account.id)}">Rename</button>${rm}</span></div>`;
+      }).join("") || `<div class="acct-note">No accounts yet.</div>`;
+      return `<div class="acct-group"><div class="acct-head">${logo(id)}${esc(name)}</div>${rows}</div>`;
+    }).join("");
+    for (const btn of host.querySelectorAll(".acct-rename-btn")) {
+      btn.onclick = () => { renaming = btn.dataset.id; renderAccounts(); };
+    }
+    const cancel = host.querySelector(".acct-rename-cancel");
+    if (cancel) cancel.onclick = () => { renaming = null; renderAccounts(); };
+    const save = host.querySelector(".acct-rename-save");
+    const input = host.querySelector(".acct-rename-input");
+    if (save && input) save.onclick = () => renameAccount(save.dataset.id, input.value);
+    for (const btn of host.querySelectorAll(".acct-remove")) {
+      btn.onclick = () => removeAccount(btn.dataset.id);
+    }
+  }
+
+  function persistAliases() {
+    localStorage.setItem("ju.aliases", JSON.stringify(aliases));
+  }
+
+  async function renameAccount(id, label) {
+    const next = String(label ?? "").trim();
+    renaming = null;
+    if (id.endsWith(":default")) {
+      if (next && next !== "Default") aliases[id] = next;
+      else delete aliases[id];
+      persistAliases();
+      render();
+      return;
+    }
+    try {
+      const body = await api(`/api/accounts/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ label: next }),
+      });
+      if (body.account && report) {
+        for (const p of report.providers) {
+          const a = p.accounts.find((x) => x.account.id === id);
+          if (a) a.account.label = body.account.label;
+        }
+      }
+      delete aliases[id];
+      persistAliases();
+    } catch (e) {
+      wizardMsg(e.message, true);
+    }
+    render();
+  }
+
+  function resetWizard() {
+    clearInterval(codexPoll);
+    wizard = { step: "provider", provider: "", label: "", secret: "", sessionId: "", authUrl: "", callback: "", msg: "", err: false };
+  }
+
+  function openWizard() {
+    resetWizard();
+    $("add-acct").showModal();
+    renderWizard();
+  }
+
+  function closeWizard() {
+    $("add-acct").close();
+    resetWizard();
+  }
+
+  function renderWizard() {
+    const dlg = $("add-acct");
+    if (!dlg.open) return;
+    const name = PROVIDERS.find(([id]) => id === wizard.provider)?.[1] || "account";
+    $("add-acct-title").textContent = wizard.step === "provider" ? "Add account" : `Add ${name}`;
+    let body = "";
+    if (wizard.step === "provider") {
+      body = `<div class="pick">
+          <button class="pick-btn" type="button" data-id="claude">${logo("claude")} Claude</button>
+          <button class="pick-btn" type="button" data-id="codex">${logo("codex")} Codex</button>
+          <button class="pick-btn" type="button" data-id="opencode">${logo("opencode")} OpenCode Go</button>
+        </div>
+        <div class="acct-note">One Cursor account for now — whatever <code>cursor-agent</code> is signed in as.</div>`;
+    } else if (wizard.step === "label") {
+      body = `<div class="acct-note">Optional. Leave blank to show as Account 2, Account 3, …</div>
+        <input class="field" id="wiz-label" placeholder="Label (optional)" value="${esc(wizard.label)}">
+        <div class="acct-actions"><button class="opts-link" id="wiz-back" type="button">Back</button>
+          <button class="refresh" id="wiz-next" type="button">Continue</button></div>`;
+    } else if (wizard.provider === "codex") {
+      body = `<div class="acct-note">Sign in with ChatGPT. If you are not on this machine, paste the localhost callback after the redirect.</div>
+        ${wizard.authUrl ? `<div class="acct-url">Open <a href="${esc(wizard.authUrl)}" target="_blank" rel="noreferrer">this sign-in URL</a></div>
+          <input class="field" id="wiz-callback" placeholder="http://localhost:… callback" value="${esc(wizard.callback)}">
+          <button class="refresh" id="wiz-callback-go" type="button">Submit callback</button>` 
+          : `<button class="refresh" id="wiz-codex" type="button">Sign in with ChatGPT</button>`}
+        <button class="opts-link" id="wiz-back" type="button">Back</button>`;
+    } else {
+      const ph = wizard.provider === "claude" ? "Setup token from <code>claude setup-token</code>" : "OpenCode Go API key";
+      body = `<div class="acct-note">${ph}.</div>
+        <input class="field" id="wiz-secret" type="password" placeholder="${wizard.provider === "claude" ? "Setup token" : "API key"}" value="${esc(wizard.secret)}" autocomplete="off">
+        <div class="acct-actions"><button class="opts-link" id="wiz-back" type="button">Back</button>
+          <button class="refresh" id="wiz-save" type="button">Add</button></div>`;
+    }
+    if (wizard.msg) body += `<div class="acct-msg${wizard.err ? " err" : ""}">${esc(wizard.msg)}</div>`;
+    $("add-acct-body").innerHTML = body;
+    for (const btn of dlg.querySelectorAll(".pick-btn")) {
+      btn.onclick = () => { wizard.provider = btn.dataset.id; wizard.step = "label"; renderWizard(); };
+    }
+    const label = $("wiz-label");
+    if (label) label.oninput = () => { wizard.label = label.value; };
+    const secret = $("wiz-secret");
+    if (secret) secret.oninput = () => { wizard.secret = secret.value; };
+    const cb = $("wiz-callback");
+    if (cb) cb.oninput = () => { wizard.callback = cb.value; };
+    const back = $("wiz-back");
+    if (back) back.onclick = () => {
+      wizard.msg = "";
+      wizard.step = wizard.step === "auth" ? "label" : "provider";
+      if (wizard.step === "provider") wizard.provider = "";
+      renderWizard();
+    };
+    const next = $("wiz-next");
+    if (next) next.onclick = () => { wizard.step = "auth"; wizard.msg = ""; renderWizard(); };
+    const save = $("wiz-save");
+    if (save) save.onclick = addToken;
+    const start = $("wiz-codex");
+    if (start) start.onclick = startCodex;
+    const submit = $("wiz-callback-go");
+    if (submit) submit.onclick = submitCodexCallback;
+  }
+
+  async function addToken() {
+    if (busy) return;
+    if (!wizard.secret.trim()) { wizardMsg("Paste a token or key first.", true); renderWizard(); return; }
+    busy = true;
+    wizardMsg("Adding…", false);
+    renderWizard();
+    try {
+      const body = await api("/api/accounts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ provider: wizard.provider, label: wizard.label, secret: wizard.secret }),
+      });
+      closeWizard();
+      if (body.warning) wizardMsg(body.warning, false);
+      await load(true);
+    } catch (e) {
+      wizardMsg(e.message, true);
+    } finally {
+      busy = false;
+      if ($("add-acct").open) renderWizard();
+    }
+  }
+
+  async function startCodex() {
+    if (busy) return;
+    const popup = window.open("about:blank", "_blank");
+    busy = true;
+    wizardMsg("Starting sign-in…", false);
+    renderWizard();
+    try {
+      const body = await api("/api/accounts/codex/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ label: wizard.label }),
+      });
+      wizard.sessionId = body.sessionId;
+      wizard.authUrl = body.authUrl;
+      if (body.authUrl) {
+        if (popup) popup.location.replace(body.authUrl);
+        else window.location.assign(body.authUrl);
+      } else {
+        popup?.close();
+      }
+      wizardMsg("Waiting for sign-in…", false);
+      pollCodex();
+    } catch (e) {
+      popup?.close();
+      wizardMsg(e.message, true);
+    } finally {
+      busy = false;
+      renderWizard();
+    }
+  }
+
+  async function submitCodexCallback() {
+    if (!wizard.sessionId) return;
+    try {
+      await api("/api/accounts/codex/callback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId: wizard.sessionId, url: wizard.callback }),
+      });
+      wizardMsg("Callback submitted. Waiting for Codex…", false);
+      renderWizard();
+      pollCodex();
+    } catch (e) {
+      wizardMsg(e.message, true);
+      renderWizard();
+    }
+  }
+
+  function pollCodex() {
+    clearInterval(codexPoll);
+    if (!wizard.sessionId) return;
+    const tick = async () => {
+      try {
+        const body = await api(`/api/accounts/codex/session/${encodeURIComponent(wizard.sessionId)}`);
+        if (body.status === "done") {
+          clearInterval(codexPoll);
+          closeWizard();
+          await load(true);
+        } else if (body.status === "error") {
+          clearInterval(codexPoll);
+          wizardMsg(body.error || "Sign-in failed.", true);
+          wizard.sessionId = "";
+          renderWizard();
+        }
+      } catch {}
+    };
+    tick();
+    codexPoll = setInterval(tick, 2000);
+  }
+
+  async function removeAccount(id) {
+    if (busy) return;
+    busy = true;
+    try {
+      await api(`/api/accounts/${encodeURIComponent(id)}`, { method: "DELETE" });
+      await load(true);
+    } catch (e) {
+      wizardMsg(e.message, true);
+    } finally {
+      busy = false;
+      renderAccounts();
+    }
+  }
+
+  function renderSettings() {
+    if (!dragging) renderOptions();
+  }
+
+  function renderChrome() {
     if (report) {
-      $("host").textContent = report.hostname;
-      $("updated").textContent = loading ? "refreshing…" : `updated ${fmtTime(report.fetchedAt)}`;
+      $("host").textContent = formatHost(report.hostname);
+      $("updated").textContent = `updated ${fmtAgo(report.fetchedAt)}`;
       $("version").textContent = `v${report.version}`;
       const u = report.update;
       $("update").innerHTML = u && u.available
         ? `<span class="update">v${esc(u.latest)} available — run <code>just-usage upgrade</code></span>`
-        : `<kbd>1</kbd>–<kbd>4</kbd> switch tabs · <kbd>r</kbd> refresh`;
+        : "";
     }
-    $("refresh").disabled = loading;
+    const locked = refreshLocked();
+    $("refresh").disabled = loading || locked;
+    $("refresh").textContent = loading ? "Refreshing…" : locked ? refreshLabel() : "Refresh data";
+    $("opts-label").textContent = settingsOpen ? "Back" : "Options";
+    $("opts-btn").classList.toggle("back", settingsOpen);
   }
 
-  async function load(force) {
+  function render() {
+    ensureActive();
+    $("dash").hidden = settingsOpen;
+    $("settings").hidden = !settingsOpen;
+    if (settingsOpen) renderSettings();
+    else {
+      renderTabs();
+      renderPanel();
+    }
+    renderChrome();
+  }
+
+  function adoptReport(next) {
+    if (report) {
+      for (const p of next.providers || []) {
+        const prev = report.providers.find((x) => x.id === p.id);
+        for (const a of p.accounts || []) {
+          const old = prev?.accounts.find((x) => x.account.id === a.account.id);
+          if (!a.account.email && old?.account.email) a.account.email = old.account.email;
+          if (!a.account.plan && old?.account.plan) a.account.plan = old.account.plan;
+        }
+      }
+    }
+    report = next;
+    try { localStorage.setItem("ju.report", JSON.stringify(next)); } catch {}
+  }
+
+  const COOLDOWN_MS = 5 * 60 * 1000;
+  function refreshUntil() {
+    return Number(localStorage.getItem("ju.refreshAt") || 0) + COOLDOWN_MS;
+  }
+  function refreshLocked() {
+    return Date.now() < refreshUntil();
+  }
+  function refreshLabel() {
+    const left = refreshUntil() - Date.now();
+    if (left <= 0) return "Refresh data";
+    const min = Math.max(1, Math.ceil(left / 60000));
+    return `Refresh in ${min}m`;
+  }
+  function markRefreshed() {
+    localStorage.setItem("ju.refreshAt", String(Date.now()));
+  }
+
+  async function load(force, manual) {
+    if (manual && refreshLocked()) return;
+    if (manual) markRefreshed();
     loading = true;
     render();
     try {
       const res = await fetch(`/api/quotas${force ? "?refresh=1" : ""}`, { cache: "no-store" });
-      report = await res.json();
+      adoptReport(await res.json());
     } catch (e) {
-      $("panel").innerHTML = `<div class="empty">Couldn't reach just-usage. Is the server still running?</div>`;
+      if (!report) $("panel").innerHTML = `<div class="empty">Couldn't reach just-usage. Is the server still running?</div>`;
     } finally {
       loading = false;
       render();
     }
   }
 
-  $("refresh").onclick = () => load(true);
+  $("opts-btn").onclick = () => setView(!settingsOpen);
+  $("refresh").onclick = () => load(true, true);
+  $("opts-signed-in").onclick = () => persistEnabled(null);
+  $("opts-email").onchange = () => {
+    showEmail = $("opts-email").checked;
+    localStorage.setItem("ju.showEmail", showEmail ? "1" : "0");
+    if (settingsOpen) renderAccounts();
+    else render();
+  };
+  $("acct-add").onclick = openWizard;
+  $("add-acct-close").onclick = closeWizard;
+  $("add-acct").addEventListener("close", resetWizard);
+  $("add-acct").addEventListener("click", (e) => { if (e.target === $("add-acct")) closeWizard(); });
+  for (const input of $("opts-meter").querySelectorAll("input")) {
+    input.onchange = () => {
+      showLeft = input.value === "left";
+      localStorage.setItem("ju.showLeft", showLeft ? "1" : "0");
+      if (!settingsOpen) render();
+    };
+  }
   document.addEventListener("keydown", (e) => {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
-    if (e.key >= "1" && e.key <= "4") { active = PROVIDERS[Number(e.key) - 1][0]; localStorage.setItem("ju.tab", active); render(); }
-    else if (e.key === "r") load(true);
+    if (settingsOpen) return;
+    const vis = visibleIds();
+    if (e.key >= "1" && e.key <= String(vis.length)) {
+      active = vis[Number(e.key) - 1];
+      localStorage.setItem("ju.tab", active);
+      render();
+    } else if (e.key === "r") load(true, true);
   });
-  setInterval(() => { if (report && !loading) render(); }, 30000);
+  const STALE_MS = 5 * 60 * 1000;
+  function maybeAutoRefresh() {
+    if (!report || loading || settingsOpen) return;
+    const t = Date.parse(report.fetchedAt);
+    if (Number.isFinite(t) && Date.now() - t >= STALE_MS) load(true);
+  }
+  setInterval(() => {
+    maybeAutoRefresh();
+    if (!report || loading) return;
+    if (settingsOpen) renderChrome();
+    else render();
+  }, 15000);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") maybeAutoRefresh();
+  });
+  if (report) render();
   load(false);
 })();
 </script>

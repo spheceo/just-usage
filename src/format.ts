@@ -40,16 +40,36 @@ export function isoOrNull(v: unknown): string | null {
 export function clampPercent(v: unknown): number | null {
   if (typeof v === "string" && v.trim() !== "") v = Number(v);
   if (typeof v !== "number" || !Number.isFinite(v)) return null;
-  return Math.min(100, Math.max(0, Math.round(v * 10) / 10));
+  if (v <= 0) return 0;
+  if (v >= 100) return 100;
+  const tenth = Math.round(v * 10) / 10;
+  // Keep a tenth so 0.04% does not become 0 and 99.96% does not become 100.
+  if (tenth === 0) return 0.1;
+  if (tenth === 100) return 99.9;
+  return tenth;
+}
+
+/** "31%" when whole, "1.3%" / "0.5%" when a tenth matters. Never rounds 99.4 up to 100. */
+export function formatPercent(used: number | null): string {
+  if (used === null) return "—";
+  const n = clampPercent(used) ?? 0;
+  const tenth = Math.round(n * 10) / 10;
+  return Number.isInteger(tenth) ? `${tenth}%` : `${tenth.toFixed(1)}%`;
+}
+
+/** First letter of each word, for plan names like plus / go / pro. */
+export function formatPlan(plan: string | null | undefined): string | null {
+  if (!plan || !plan.trim()) return null;
+  return plan.replace(/\S+/g, (w) => w.charAt(0).toUpperCase() + w.slice(1));
 }
 
 export function windowLabel(minutes: number | null): string {
-  if (minutes === null) return "Window";
-  if (minutes === 300) return "5h";
-  if (minutes === 10080) return "Weekly";
-  if (minutes % 1440 === 0) return `${minutes / 1440}d`;
-  if (minutes % 60 === 0) return `${minutes / 60}h`;
-  return `${minutes}m`;
+  if (minutes === null) return "Window Usage";
+  if (minutes === 300) return "5h Usage";
+  if (minutes === 10080) return "Weekly Usage";
+  if (minutes % 1440 === 0) return `${minutes / 1440}d Usage`;
+  if (minutes % 60 === 0) return `${minutes / 60}h Usage`;
+  return `${minutes}m Usage`;
 }
 
 export function formatDuration(ms: number): string {
@@ -82,6 +102,11 @@ export function severity(usedPercent: number | null): Severity | null {
   return "ok";
 }
 
+/** "Siphesihles-MacBook-Air-M4" → "Siphesihles MacBook Air M4" */
+export function formatHostname(name: string): string {
+  return name.replace(/\.local$/, "").replace(/[-_]+/g, " ").replace(/\s+/g, " ").trim();
+}
+
 export function slugify(s: string): string {
   return s
     .toLowerCase()
@@ -89,4 +114,31 @@ export function slugify(s: string): string {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 40) || "account";
+}
+
+const GENERIC_LABELS = new Set(["", "default", "token", "go", "pending", "profile", "account", "codex"]);
+
+/** Labels we stored automatically (email, "go", "token") — not a name the user chose. */
+export function isGenericAccountLabel(label: string | null | undefined, email?: string | null): boolean {
+  const s = (label ?? "").trim();
+  if (!s) return true;
+  if (email && s === email) return true;
+  return GENERIC_LABELS.has(s.toLowerCase());
+}
+
+/** Default is card 1. An unlabeled extra is "Account 2". Email only when the user asks. */
+export function accountDisplayName(opts: {
+  kind: string;
+  label: string;
+  email?: string | null;
+  index: number;
+  showEmail: boolean;
+  alias?: string | null;
+}): string {
+  if (opts.showEmail && opts.email) return opts.email;
+  const alias = opts.alias?.trim();
+  if (alias) return alias;
+  if (opts.kind === "default" || /^default$/i.test(opts.label.trim())) return "Default";
+  if (!isGenericAccountLabel(opts.label, opts.email)) return opts.label.trim();
+  return `Account ${opts.index + 1}`;
 }

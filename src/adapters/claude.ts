@@ -108,18 +108,19 @@ export function normalizeClaudeUsage(body: unknown): QuotaWindow[] {
   const out: QuotaWindow[] = [];
   const push = (w: QuotaWindow | null) => w && out.push(w);
 
-  push(bucket(body.five_hour, "five_hour", "5h", 300));
-  push(bucket(body.seven_day, "seven_day", "Weekly", 10080));
-  push(bucket(body.seven_day_opus, "seven_day_opus", "Weekly · Opus", 10080));
-  push(bucket(body.seven_day_sonnet, "seven_day_sonnet", "Weekly · Sonnet", 10080));
-  push(bucket(body.seven_day_oauth_apps, "seven_day_oauth_apps", "Weekly · OAuth apps", 10080));
+  push(bucket(body.five_hour, "five_hour", "5h Usage", 300));
+  push(bucket(body.seven_day, "seven_day", "Weekly Usage", 10080));
+  push(bucket(body.seven_day_opus, "seven_day_opus", "Weekly · Opus Usage", 10080));
+  push(bucket(body.seven_day_sonnet, "seven_day_sonnet", "Weekly · Sonnet Usage", 10080));
+  push(bucket(body.seven_day_oauth_apps, "seven_day_oauth_apps", "Weekly · OAuth apps Usage", 10080));
 
   // Newer payloads may carry a `limits` array; only consult it when the legacy buckets are missing.
   if (out.length === 0 && Array.isArray(body.limits)) {
     for (const [i, item] of body.limits.entries()) {
       if (!isObject(item)) continue;
       const name = [item.name, item.type, item.id].find((x): x is string => typeof x === "string" && x.length > 0) ?? `limit ${i + 1}`;
-      push(bucket(item, `limits:${name}`, name.replace(/_/g, " "), null));
+      const label = name.replace(/_/g, " ");
+      push(bucket(item, `limits:${name}`, /usage$/i.test(label) ? label : `${label} Usage`, null));
     }
   }
 
@@ -153,14 +154,10 @@ async function resolveToken(account: ResolvedAccount): Promise<
     if (!token) return { fail: snapshot(account, "error", { message: "Stored token missing. Run `just-usage remove` and add it again." }) };
     return { token, plan: null };
   }
-  const status = await claudeAuthStatus(account.path);
-  if (status && !status.loggedIn) {
-    const hint = account.kind === "default" ? "Run `claude` and `/login`." : `Run \`just-usage login ${account.id}\`.`;
-    return { fail: snapshot(account, "signed_out", { message: `Not signed in. ${hint}` }) };
-  }
   const creds = await readClaudeCredentials(account.path);
   if (!creds) {
-    return { fail: snapshot(account, "error", { message: "Could not read Claude Code's credential (Keychain access denied or file missing)." }) };
+    const hint = account.kind === "default" ? "Run `claude` and `/login`." : `Run \`just-usage login ${account.id}\`.`;
+    return { fail: snapshot(account, "signed_out", { message: `Not signed in. ${hint}` }) };
   }
   if (creds.expiresAt && creds.expiresAt < Date.now()) {
     const hint = account.kind === "default" ? "Open `claude` once to refresh it." : `Run \`CLAUDE_CONFIG_DIR=${account.path} claude\` once to refresh it.`;

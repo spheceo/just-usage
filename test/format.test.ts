@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { clampPercent, epochToIso, formatDuration, formatResetIn, semverGt, severity, slugify, windowLabel } from "../src/format.ts";
+import { accountDisplayName, clampPercent, epochToIso, formatDuration, formatHostname, formatPercent, formatPlan, formatResetIn, isGenericAccountLabel, semverGt, severity, slugify, windowLabel } from "../src/format.ts";
 import { detectPackageManager, upgradeCommand } from "../src/update.ts";
-import { reachableUrls } from "../src/server.ts";
+import { TAILSCALE_NOTE, reachableUrls } from "../src/server.ts";
 
 describe("semver", () => {
   test("compares releases and prereleases", () => {
@@ -25,13 +25,28 @@ describe("time + percent helpers", () => {
     expect(clampPercent(120)).toBe(100);
     expect(clampPercent(-3)).toBe(0);
     expect(clampPercent("42.26")).toBe(42.3);
+    expect(clampPercent(0.04)).toBe(0.1);
+    expect(clampPercent(99.96)).toBe(99.9);
     expect(clampPercent(null)).toBeNull();
   });
+  test("formatPercent keeps tenths instead of rounding to 0 or 100", () => {
+    expect(formatPercent(31)).toBe("31%");
+    expect(formatPercent(1.3)).toBe("1.3%");
+    expect(formatPercent(0.5)).toBe("0.5%");
+    expect(formatPercent(99.4)).toBe("99.4%");
+    expect(formatPercent(null)).toBe("—");
+  });
+  test("formatPlan capitalizes the first letter of each word", () => {
+    expect(formatPlan("plus")).toBe("Plus");
+    expect(formatPlan("go")).toBe("Go");
+    expect(formatPlan("api key")).toBe("Api Key");
+    expect(formatPlan(null)).toBeNull();
+  });
   test("windowLabel", () => {
-    expect(windowLabel(300)).toBe("5h");
-    expect(windowLabel(10080)).toBe("Weekly");
-    expect(windowLabel(2880)).toBe("2d");
-    expect(windowLabel(90)).toBe("90m");
+    expect(windowLabel(300)).toBe("5h Usage");
+    expect(windowLabel(10080)).toBe("Weekly Usage");
+    expect(windowLabel(2880)).toBe("2d Usage");
+    expect(windowLabel(90)).toBe("90m Usage");
   });
   test("durations", () => {
     expect(formatDuration(65 * 60_000)).toBe("1h 5m");
@@ -48,6 +63,10 @@ describe("time + percent helpers", () => {
     expect(severity(84.9)).toBe("warn");
     expect(severity(85)).toBe("crit");
     expect(severity(null)).toBeNull();
+  });
+  test("formatHostname", () => {
+    expect(formatHostname("Siphesihles-MacBook-Air-M4.local")).toBe("Siphesihles MacBook Air M4");
+    expect(formatHostname("desk_top")).toBe("desk top");
   });
   test("slugify", () => {
     expect(slugify("Work Account")).toBe("work-account");
@@ -68,13 +87,30 @@ describe("upgrade", () => {
   });
 });
 
+describe("account titles", () => {
+  test("Default stays Default; first extra without a name is Account 2", () => {
+    expect(isGenericAccountLabel("go")).toBe(true);
+    expect(isGenericAccountLabel("alt")).toBe(false);
+    expect(accountDisplayName({ kind: "default", label: "Default", email: "a@b.com", index: 0, showEmail: false })).toBe("Default");
+    expect(accountDisplayName({ kind: "token", label: "go", email: null, index: 1, showEmail: false })).toBe("Account 2");
+    expect(accountDisplayName({ kind: "token", label: "alt", email: null, index: 1, showEmail: false })).toBe("alt");
+    expect(accountDisplayName({ kind: "default", label: "Default", email: "a@b.com", index: 0, showEmail: true })).toBe("a@b.com");
+    expect(accountDisplayName({ kind: "default", label: "Default", email: "a@b.com", index: 0, showEmail: false, alias: "Home" })).toBe("Home");
+  });
+});
+
 describe("server urls", () => {
   test("explicit host yields a single url", () => {
-    expect(reachableUrls("127.0.0.1", 5757)).toEqual(["http://127.0.0.1:5757"]);
+    expect(reachableUrls("127.0.0.1", 5757)).toEqual([{ kind: "local", url: "http://127.0.0.1:5757" }]);
   });
   test("wildcard host lists loopback, hostname and interfaces", () => {
-    const urls = reachableUrls("0.0.0.0", 5757);
-    expect(urls[0]).toBe("http://127.0.0.1:5757");
+    const urls = reachableUrls("0.0.0.0", 5757, null);
+    expect(urls[0]).toEqual({ kind: "local", url: "http://127.0.0.1:5757" });
     expect(urls.length).toBeGreaterThanOrEqual(2);
+    expect(urls.some((u) => u.kind === "tailscale")).toBe(false);
+  });
+  test("tailscale url is listed only when the CLI is authed", () => {
+    const urls = reachableUrls("0.0.0.0", 5757, "100.65.58.114");
+    expect(urls.some((u) => u.kind === "tailscale" && u.url === "http://100.65.58.114:5757" && u.note === TAILSCALE_NOTE)).toBe(true);
   });
 });

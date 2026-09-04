@@ -2,13 +2,12 @@
 import { parseArgs } from "node:util";
 import { createInterface } from "node:readline";
 import { codexLogin } from "./adapters/codex.ts";
-import { claudeAuthStatus, verifyClaudeToken } from "./adapters/claude.ts";
-import { fetchOpenCodeUsage } from "./adapters/opencode.ts";
+import { claudeAuthStatus } from "./adapters/claude.ts";
+import { addClaudeToken, addOpenCodeKey, removeExtraAccount, saveCodexProfile } from "./accounts.ts";
 import { collectReport } from "./collect.ts";
 import { DEFAULT_HOST, DEFAULT_PORT, PACKAGE_NAME, VERSION, ensureDir } from "./config.ts";
 import { openInBrowser, runInteractive, which } from "./proc.ts";
-import { deleteAccount, getAccount, listAccounts, newAccountId, profileDirFor, saveAccount, updateAccount } from "./registry.ts";
-import { secretStore } from "./secrets.ts";
+import { getAccount, listAccounts, newAccountId, profileDirFor, saveAccount, updateAccount } from "./registry.ts";
 import { startServer } from "./server.ts";
 import { renderReport } from "./terminal.ts";
 import { PROVIDERS, providerName, type ProviderId, type UpdateInfo } from "./types.ts";
@@ -104,9 +103,12 @@ async function cmdServe(argv: string[]) {
     throw e;
   }
   console.log(`${PACKAGE_NAME} v${VERSION}`);
-  for (const [i, url] of server.urls.entries()) console.log(`  ${i === 0 ? "local   " : "network "} ${url}`);
+  for (const u of server.urls) {
+    const tag = u.kind === "local" ? "local    " : u.kind === "tailscale" ? "tailscale" : "network  ";
+    console.log(`  ${tag} ${u.url}${u.note ? ` — ${u.note}` : ""}`);
+  }
   console.log(`\nPress Ctrl+C to stop.`);
-  if (shouldOpen) openInBrowser(server.urls[0]!);
+  if (shouldOpen) openInBrowser(server.urls[0]!.url);
 
   const shutdown = () => {
     server.close();
@@ -151,29 +153,19 @@ async function addCodex(label: string | undefined) {
     console.log(`\nOpen this URL to sign in (opening your browser):\n${url}\n`);
     openInBrowser(url);
   });
-  const finalLabel = label ?? info.email ?? tmpId.split(":")[1]!;
-  const id = label ? tmpId : newAccountId("codex", finalLabel);
-  const path = id === tmpId ? dir : ensureDir(profileDirFor("codex", id));
-  if (path !== dir) {
-    const { renameSync, rmSync } = await import("node:fs");
-    rmSync(path, { recursive: true, force: true });
-    renameSync(dir, path);
-  }
-  saveAccount({ id, provider: "codex", label: finalLabel, kind: "profile", path, email: info.email, createdAt: new Date().toISOString() });
-  console.log(`Added ${id}${info.email ? ` (${info.email}${info.plan ? `, ${info.plan}` : ""})` : ""}.`);
+  const rec = saveCodexProfile({ label, tmpId, dir, email: info.email });
+  console.log(`Added ${rec.id}${info.email ? ` (${info.email}${info.plan ? `, ${info.plan}` : ""})` : ""}.`);
 }
 
-async function addClaudeToken(label: string | undefined) {
+async function addClaudeTokenCli(label: string | undefined) {
   console.log("Run `claude setup-token` in the account you want to add, then paste the token here.");
   const token = await prompt("Token: ", { secret: true });
-  if (!token) fail("No token given.");
-  const check = await verifyClaudeToken(token);
-  if (!check.ok) fail(`Token check failed: ${check.message}`);
-  const finalLabel = label ?? check.email ?? "token";
-  const id = newAccountId("claude", finalLabel);
-  await secretStore().set(id, token);
-  saveAccount({ id, provider: "claude", label: finalLabel, kind: "token", email: check.email, createdAt: new Date().toISOString() });
-  console.log(`Added ${id}${check.email ? ` (${check.email})` : ""}. Token stored in ${secretStore().kind}.`);
+  try {
+    const { account } = await addClaudeToken(token, label);
+    console.log(`Added ${account.id}${account.email ? ` (${account.email})` : ""}.`);
+  } catch (e) {
+    fail(e instanceof Error ? e.message : String(e));
+  }
 }
 
 async function addClaudeProfile(label: string | undefined) {
@@ -192,19 +184,16 @@ async function addClaudeProfile(label: string | undefined) {
   console.log(`\nAdded ${id}. Note: on macOS the first read may trigger a Keychain prompt — choose "Always Allow".`);
 }
 
-async function addOpenCode(label: string | undefined) {
+async function addOpenCodeCli(label: string | undefined) {
   console.log("Paste an OpenCode Go API key (from https://opencode.ai/ → Go → API keys).");
   const key = await prompt("Key: ", { secret: true });
-  if (!key) fail("No key given.");
-  const { status, windows } = await fetchOpenCodeUsage(key);
-  if (status === 401) fail("Key rejected (401).");
-  if (status === 403) console.log("Warning: key is valid but has no active OpenCode Go subscription (403). Saving anyway.");
-  else if (status !== 200) fail(`Usage endpoint returned HTTP ${status}.`);
-  const finalLabel = label ?? "go";
-  const id = newAccountId("opencode", finalLabel);
-  await secretStore().set(id, key);
-  saveAccount({ id, provider: "opencode", label: finalLabel, kind: "token", createdAt: new Date().toISOString() });
-  console.log(`Added ${id}${windows.length ? ` (${windows.map((w) => `${w.label} ${w.usedPercent}%`).join(", ")})` : ""}. Key stored in ${secretStore().kind}.`);
+  try {
+    const { account, warning } = await addOpenCodeKey(key, label);
+    if (warning) console.log(`Warning: ${warning} Saving anyway.`);
+    console.log(`Added ${account.id}.`);
+  } catch (e) {
+    fail(e instanceof Error ? e.message : String(e));
+  }
 }
 
 async function cmdAdd(argv: string[]) {
@@ -219,9 +208,9 @@ async function cmdAdd(argv: string[]) {
     case "codex":
       return addCodex(values.label);
     case "claude":
-      return values.token ? addClaudeToken(values.label) : addClaudeProfile(values.label);
+      return values.token ? addClaudeTokenCli(values.label) : addClaudeProfile(values.label);
     case "opencode":
-      return addOpenCode(values.label);
+      return addOpenCodeCli(values.label);
     case "cursor":
       fail("Cursor is single-account: just-usage shows whatever `cursor-agent` is logged in as.");
   }
@@ -253,10 +242,12 @@ async function cmdRemove(argv: string[]) {
   const id = argv[0];
   if (!id) fail("Usage: just-usage remove <account-id>");
   if (id.endsWith(":default")) fail("Default accounts belong to the CLI itself; sign out there instead.");
-  const rec = deleteAccount(id);
-  if (!rec) fail(`Unknown account: ${id}`);
-  if (rec.kind === "token") await secretStore().delete(id);
-  console.log(`Removed ${id}.`);
+  try {
+    const rec = await removeExtraAccount(id);
+    console.log(`Removed ${rec.id}.`);
+  } catch (e) {
+    fail(e instanceof Error ? e.message : String(e));
+  }
 }
 
 async function cmdUpgrade(argv: string[]) {

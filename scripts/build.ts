@@ -14,7 +14,7 @@ const result = await Bun.build({
   naming: "cli.js",
   minify: false,
   sourcemap: "none",
-  loader: { ".html": "text" },
+  loader: { ".html": "text", ".svg": "text" },
 });
 
 if (!result.success) {

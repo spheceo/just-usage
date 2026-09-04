@@ -3,30 +3,78 @@
  * Quota comes from the dashboard RPC the Cursor app itself uses:
  *   POST https://api2.cursor.sh/aiserver.v1.DashboardService/GetCurrentPeriodUsage
  * Cursor plans are dollar budgets per billing cycle, so this yields "cycle" windows, not 5h/7d.
+ *
+ * `cursor-agent login` stores the session in the macOS Keychain (service
+ * `cursor-access-token`). The file store (`~/.cursor/auth.json` and the Linux /
+ * Windows equivalents) is a fallback for non-macOS and older installs.
  */
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { clampPercent, epochToIso } from "../format.ts";
-import { run, stripAnsi } from "../proc.ts";
+import { clampPercent, epochToIso, isoOrNull } from "../format.ts";
+import { run } from "../proc.ts";
 import type { QuotaSnapshot, QuotaWindow, ResolvedAccount } from "../types.ts";
 import { errorMessage, fetchJson, isObject, snapshot, type JsonObject } from "./common.ts";
 
 const USAGE_URL = "https://api2.cursor.sh/aiserver.v1.DashboardService/GetCurrentPeriodUsage";
+const GROK_BOT_URL = "https://api2.cursor.sh/aiserver.v1.DashboardService/GetSandUsageStatus";
+const PLAN_URL = "https://api2.cursor.sh/aiserver.v1.DashboardService/GetPlanInfo";
+const KEYCHAIN_ACCOUNT = "cursor-user";
+const KEYCHAIN_SERVICE = "cursor-access-token";
 
-function authFile(): string {
-  return process.env.CURSOR_AUTH_FILE ?? join(homedir(), ".cursor", "auth.json");
+/** Pull `accessToken` out of a cursor-agent auth.json body. */
+export function tokenFromAuthJson(parsed: unknown): string | null {
+  if (!isObject(parsed)) return null;
+  return typeof parsed.accessToken === "string" && parsed.accessToken ? parsed.accessToken : null;
 }
 
-function readAccessToken(): string | null {
-  const file = authFile();
+function tokenFromAuthFile(file: string): string | null {
   if (!existsSync(file)) return null;
   try {
-    const parsed = JSON.parse(readFileSync(file, "utf8")) as JsonObject;
-    return typeof parsed.accessToken === "string" && parsed.accessToken ? parsed.accessToken : null;
+    return tokenFromAuthJson(JSON.parse(readFileSync(file, "utf8")));
   } catch {
     return null;
   }
+}
+
+function authFiles(): string[] {
+  const home = homedir();
+  const out: string[] = [];
+  if (process.platform === "win32") {
+    const roaming = process.env.APPDATA || join(home, "AppData", "Roaming");
+    out.push(join(roaming, "Cursor", "auth.json"));
+  } else if (process.platform !== "darwin") {
+    const xdg = process.env.XDG_CONFIG_HOME || join(home, ".config");
+    out.push(join(xdg, "cursor", "auth.json"));
+  }
+  out.push(join(home, ".cursor", "auth.json"));
+  return out;
+}
+
+async function tokenFromKeychain(): Promise<string | null> {
+  if (process.platform !== "darwin") return null;
+  const res = await run("security", ["find-generic-password", "-a", KEYCHAIN_ACCOUNT, "-s", KEYCHAIN_SERVICE, "-w"], { timeoutMs: 20_000 });
+  if (res.code !== 0) return null;
+  const v = res.stdout.replace(/\r?\n$/, "");
+  return v || null;
+}
+
+/** Session token `cursor-agent` is currently using. Never logged or written back. */
+export async function readCursorAccessToken(): Promise<string | null> {
+  const env = process.env.CURSOR_AUTH_TOKEN?.trim();
+  if (env) return env;
+  if (process.env.CURSOR_AUTH_FILE) {
+    const fromFile = tokenFromAuthFile(process.env.CURSOR_AUTH_FILE);
+    if (fromFile) return fromFile;
+  }
+  const fromKeychain = await tokenFromKeychain();
+  if (fromKeychain) return fromKeychain;
+  if (process.env.CURSOR_AUTH_FILE) return null;
+  for (const file of authFiles()) {
+    const fromFile = tokenFromAuthFile(file);
+    if (fromFile) return fromFile;
+  }
+  return null;
 }
 
 function jwtExpiry(token: string): number | null {
@@ -39,13 +87,6 @@ function jwtExpiry(token: string): number | null {
   } catch {
     return null;
   }
-}
-
-export async function cursorEmail(): Promise<string | null> {
-  const res = await run("cursor-agent", ["status"], { timeoutMs: 15_000 });
-  const text = stripAnsi(res.stdout + "\n" + res.stderr);
-  const m = text.match(/Logged in as\s+(\S+)/i);
-  return m?.[1] ?? null;
 }
 
 // ---- normalization -------------------------------------------------------
@@ -67,24 +108,10 @@ export function normalizeCursorUsage(body: unknown): QuotaWindow[] | null {
 
   const plan = isObject(body.planUsage) ? body.planUsage : null;
   if (plan) {
-    const limit = cents(plan.limit);
-    const included = cents(plan.includedSpend);
-    const bonus = cents(plan.bonusSpend);
-    // The included allowance is the real plan meter. totalPercentUsed is a blended
-    // figure Cursor only quotes for auto-mode, so it is a fallback, not the headline.
-    let used = limit && included !== null ? clampPercent((included / limit) * 100) : null;
-    if (used === null) used = clampPercent(plan.totalPercentUsed);
-    if (used !== null) {
-      const parts: string[] = [];
-      if (limit !== null && included !== null) parts.push(`${money(included)} of ${money(limit)} included`);
-      if (bonus) parts.push(`${money(bonus)} bonus usage`);
-      if (typeof body.displayMessage === "string" && body.displayMessage.trim()) parts.push(body.displayMessage.trim());
-      out.push({ id: "included", label: "Included · billing cycle", usedPercent: used, resetsAt: cycleEnd, windowMinutes: null, kind: "cycle", note: parts.join(" · ") || undefined });
-    }
-    const api = clampPercent(plan.apiPercentUsed);
-    if (api !== null) out.push({ id: "api", label: "Named models", usedPercent: api, resetsAt: cycleEnd, windowMinutes: null, kind: "cycle" });
     const auto = clampPercent(plan.autoPercentUsed);
-    if (auto !== null) out.push({ id: "auto", label: "Auto models", usedPercent: auto, resetsAt: cycleEnd, windowMinutes: null, kind: "cycle" });
+    if (auto !== null) out.push({ id: "auto", label: "Cursor Models", usedPercent: auto, resetsAt: cycleEnd, windowMinutes: null, kind: "cycle" });
+    const api = clampPercent(plan.apiPercentUsed);
+    if (api !== null) out.push({ id: "api", label: "Other Models", usedPercent: api, resetsAt: cycleEnd, windowMinutes: null, kind: "cycle" });
   }
 
   const spend = isObject(body.spendLimitUsage) ? body.spendLimitUsage : null;
@@ -119,38 +146,80 @@ export function normalizeCursorUsage(body: unknown): QuotaWindow[] | null {
   return out.length ? out : null;
 }
 
+/** Normalize `GetSandUsageStatus`. Hidden when the account has no personal Grok Bot allowance. */
+export function normalizeGrokBotUsage(body: unknown): QuotaWindow | null {
+  if (!isObject(body)) return null;
+  const src = isObject(body.usage) ? body.usage : body;
+  if (src.usesPooledEnterpriseAllowance === true) return null;
+  if (src.hasNonZeroIncludedLimit === false) return null;
+  if (src.includedLimitZero === true) return null;
+  const used = clampPercent(src.usagePercent);
+  if (used === null) return null;
+  return {
+    id: "grok_bot",
+    label: "Weekly Usage",
+    group: "Grok Bot",
+    usedPercent: used,
+    resetsAt: isoOrNull(src.nextResetTimestampUtc) ?? epochToIso(src.nextResetTimestampUtc),
+    windowMinutes: 10080,
+    kind: "rolling",
+  };
+}
+
+function insertGrokBot(windows: QuotaWindow[], grok: QuotaWindow): QuotaWindow[] {
+  const extra = windows.findIndex((w) => w.id === "on_demand" || w.id === "pooled");
+  if (extra === -1) return [...windows, grok];
+  return [...windows.slice(0, extra), grok, ...windows.slice(extra)];
+}
+
+/** Plan name from `GetPlanInfo`, e.g. Ultra / Pro. */
+export function planFromCursorPlanInfo(body: unknown): string | null {
+  if (!isObject(body)) return null;
+  const info = isObject(body.planInfo) ? body.planInfo : body;
+  return typeof info.planName === "string" && info.planName.trim() ? info.planName.trim() : null;
+}
+
 // ---- fetch ---------------------------------------------------------------
 
 export async function fetchCursor(account: ResolvedAccount): Promise<QuotaSnapshot> {
   try {
-    const token = readAccessToken();
+    const token = await readCursorAccessToken();
     if (!token) return snapshot(account, "signed_out", { message: "Not signed in. Run `cursor-agent login`." });
     const exp = jwtExpiry(token);
-    const emailP = cursorEmail().catch(() => null);
     if (exp && exp < Date.now()) {
-      return snapshot(account, "error", { email: await emailP, message: "Cursor session expired. Run `cursor-agent login`." });
+      return snapshot(account, "error", { email: account.email ?? null, message: "Cursor session expired. Run `cursor-agent login`." });
     }
-    const res = await fetchJson(USAGE_URL, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-        "Connect-Protocol-Version": "1",
-      },
+    const headers = {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+      "Connect-Protocol-Version": "1",
+    };
+    const extra = {
+      method: "POST" as const,
+      headers,
       body: "{}",
-    });
-    const email = await emailP;
+    };
+    const grokReq = fetchJson(GROK_BOT_URL, extra).catch(() => null);
+    const planReq = fetchJson(PLAN_URL, extra).catch(() => null);
+    const res = await fetchJson(USAGE_URL, extra);
+    const email = account.email ?? null;
     if (res.status === 401 || res.status === 403) {
       return snapshot(account, "error", { email, message: `Cursor rejected the session (${res.status}). Run \`cursor-agent login\`.` });
     }
     if (res.status !== 200) {
       return snapshot(account, "error", { email, message: `Cursor usage endpoint returned HTTP ${res.status}.` });
     }
-    const windows = normalizeCursorUsage(res.body);
+    let windows = normalizeCursorUsage(res.body);
     if (!windows) {
       return snapshot(account, "unsupported", { email, message: "Cursor returned no plan usage for this account (team/enterprise plans are not supported yet)." });
     }
-    return snapshot(account, "ok", { email, windows });
+    const [grokRes, planRes] = await Promise.all([grokReq, planReq]);
+    if (grokRes?.status === 200) {
+      const grok = normalizeGrokBotUsage(grokRes.body);
+      if (grok) windows = insertGrokBot(windows, grok);
+    }
+    const plan = planRes?.status === 200 ? planFromCursorPlanInfo(planRes.body) : null;
+    return snapshot(account, "ok", { email, plan, windows });
   } catch (e) {
     return snapshot(account, "error", { message: errorMessage(e) });
   }

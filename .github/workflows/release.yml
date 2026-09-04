@@ -49,8 +49,17 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          NOTES="$(bun -e '
+            import { extractReleaseNotes } from "./scripts/changelog.ts";
+            const tag = process.env.GITHUB_REF_NAME ?? "";
+            const notes = extractReleaseNotes(await Bun.file("CHANGELOG.md").text(), tag);
+            if (!notes) {
+              console.error("CHANGELOG.md is missing a section for " + tag);
+              process.exit(1);
+            }
+            process.stdout.write(notes);
+          ')"
           npm pack --silent
           gh release create "${GITHUB_REF_NAME}" ./*.tgz \
             --title "${GITHUB_REF_NAME}" \
-            --generate-notes \
-            --notes "Install or update: \`npm i -g just-usage@${GITHUB_REF_NAME#v}\` (or \`just-usage upgrade\`)."
+            --notes "$NOTES"

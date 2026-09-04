@@ -37,9 +37,9 @@ export function readOpenCodeGoKey(): string | null {
 // ---- normalization -------------------------------------------------------
 
 const WINDOWS: ReadonlyArray<{ key: string; id: string; label: string; minutes: number | null; kind: QuotaWindow["kind"] }> = [
-  { key: "rolling", id: "rolling", label: "5h", minutes: 300, kind: "rolling" },
-  { key: "weekly", id: "weekly", label: "Weekly", minutes: 10080, kind: "rolling" },
-  { key: "monthly", id: "monthly", label: "Monthly", minutes: null, kind: "cycle" },
+  { key: "rolling", id: "rolling", label: "5h Usage", minutes: 300, kind: "rolling" },
+  { key: "weekly", id: "weekly", label: "Weekly Usage", minutes: 10080, kind: "rolling" },
+  { key: "monthly", id: "monthly", label: "Monthly Usage", minutes: null, kind: "cycle" },
 ];
 
 export function normalizeOpenCodeUsage(body: unknown): QuotaWindow[] {
@@ -74,7 +74,7 @@ export async function fetchOpenCode(account: ResolvedAccount): Promise<QuotaSnap
     }
     const { status, windows } = await fetchOpenCodeUsage(key);
     if (status === 401) return snapshot(account, "error", { message: "Key rejected (401)." });
-    if (status === 403) return snapshot(account, "unsupported", { message: "Valid key, but no active OpenCode Go subscription (403)." });
+    if (status === 403) return snapshot(account, "unsupported", { message: "No active OpenCode Go subscription." });
     if (status === 429) return snapshot(account, "error", { message: "Rate limited (429). Try again shortly." });
     if (status !== 200) return snapshot(account, "error", { message: `Usage endpoint returned HTTP ${status}.` });
     if (windows.length === 0) return snapshot(account, "unsupported", { message: "Usage response had no recognizable windows." });

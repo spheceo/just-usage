@@ -1,4 +1,5 @@
 import { hostname } from "node:os";
+import { formatHostname } from "./format.ts";
 import { fetchSnapshot } from "./adapters/index.ts";
 import { snapshot } from "./adapters/common.ts";
 import { FETCH_TIMEOUT_MS, VERSION } from "./config.ts";
@@ -16,8 +17,7 @@ export async function detectProviders(): Promise<ProviderPresence[]> {
   return Promise.all(
     PROVIDERS.map(async (p) => {
       const path = await which(p.bin);
-      const version = path ? await binVersion(p.bin) : null;
-      return { id: p.id, installed: path !== null, version };
+      return { id: p.id, installed: path !== null, version: null };
     }),
   );
 }
@@ -49,13 +49,16 @@ export async function collectReport(update: UpdateInfo | null, only?: ProviderId
     PROVIDERS.filter((p) => !only || only.includes(p.id)).map(async (p): Promise<ProviderReport> => {
       const pres = presence.find((x) => x.id === p.id)!;
       const accounts = resolveAccounts(p.id, pres.installed);
-      const snapshots = await Promise.all(accounts.map(fetchAccount));
-      return { id: p.id, name: p.name, installed: pres.installed, version: pres.version, accounts: snapshots };
+      const [snapshots, version] = await Promise.all([
+        Promise.all(accounts.map(fetchAccount)),
+        pres.installed ? binVersion(p.bin) : Promise.resolve(null),
+      ]);
+      return { id: p.id, name: p.name, installed: pres.installed, version, accounts: snapshots };
     }),
   );
   return {
     version: VERSION,
-    hostname: hostname().replace(/\.local$/, ""),
+    hostname: formatHostname(hostname()),
     fetchedAt: new Date().toISOString(),
     update,
     providers,
@@ -72,10 +75,10 @@ export class ReportCache {
   ) {}
 
   get(force = false): Promise<UsageReport> {
-    if (this.inflight) return this.inflight;
-    if (!force && this.report && Date.now() - Date.parse(this.report.fetchedAt) < this.ttlMs) {
-      return Promise.resolve({ ...this.report, update: this.getUpdate() });
-    }
+    const cached = this.report ? { ...this.report, update: this.getUpdate() } : null;
+    const fresh = cached && Date.now() - Date.parse(cached.fetchedAt) < this.ttlMs;
+    if (!force && fresh) return Promise.resolve(cached);
+    if (this.inflight) return cached && !force ? Promise.resolve(cached) : this.inflight;
     this.inflight = collectReport(this.getUpdate())
       .then((r) => {
         this.report = r;
@@ -84,10 +87,16 @@ export class ReportCache {
       .finally(() => {
         this.inflight = null;
       });
+    // Serve the last good report immediately while a refresh runs.
+    if (!force && cached) return Promise.resolve(cached);
     return this.inflight;
   }
 
   peek(): UsageReport | null {
     return this.report ? { ...this.report, update: this.getUpdate() } : null;
+  }
+
+  invalidate() {
+    this.report = null;
   }
 }

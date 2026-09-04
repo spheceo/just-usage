@@ -1,4 +1,4 @@
-import { formatResetIn, severity } from "./format.ts";
+import { formatPercent, formatResetIn, severity } from "./format.ts";
 import type { QuotaSnapshot, UsageReport } from "./types.ts";
 
 const useColor = process.stdout.isTTY && !process.env.NO_COLOR;
@@ -19,7 +19,7 @@ function bar(used: number | null, width = 20): string {
 
 function pct(used: number | null): string {
   if (used === null) return "  —  ";
-  const s = `${String(Math.round(used)).padStart(3)}%`;
+  const s = formatPercent(used).padStart(5);
   const sev = severity(used);
   return sev === "crit" ? c.red(s) : sev === "warn" ? c.yellow(s) : s;
 }
