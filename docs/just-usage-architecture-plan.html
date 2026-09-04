@@ -1,0 +1,745 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <title>just-usage — Architecture &amp; Build Plan</title>
+  <style>
+    :root {
+      --bg: #000;
+      --surface: #050505;
+      --surface-2: #0a0a0a;
+      --surface-3: #111;
+      --ink: #fff;
+      --muted: #a1a1a1;
+      --line: #292929;
+      --lime: #fff;
+      --lime-soft: rgba(255, 255, 255, .06);
+      --cyan: #fff;
+      --cyan-soft: rgba(255, 255, 255, .06);
+      --amber: #fff;
+      --amber-soft: rgba(255, 255, 255, .06);
+      --red: #fff;
+      --red-soft: rgba(255, 255, 255, .06);
+      --blue: #fff;
+      --radius: 8px;
+      --shadow: none;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.5;
+    }
+
+    a { color: inherit; }
+    code {
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      font-size: .9em;
+      color: var(--cyan);
+    }
+    .shell { width: min(1180px, calc(100% - 32px)); margin: 0 auto; }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      border-bottom: 1px solid var(--line);
+      background: rgba(0, 0, 0, .96);
+    }
+    .topbar-inner {
+      min-height: 58px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+    }
+    .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; }
+    .brand-mark {
+      width: 28px;
+      height: 28px;
+      display: grid;
+      place-items: center;
+      border-radius: 3px;
+      background: var(--lime);
+      color: #000;
+      font: 800 14px/1 "SFMono-Regular", Consolas, monospace;
+    }
+    nav { display: flex; gap: 18px; flex-wrap: wrap; }
+    nav a { color: var(--muted); text-decoration: none; font-size: 13px; }
+    nav a:hover { color: var(--ink); }
+
+    header { padding: 86px 0 54px; }
+    .eyebrow {
+      color: var(--lime);
+      font: 700 12px/1.2 "SFMono-Regular", Consolas, monospace;
+      text-transform: uppercase;
+      letter-spacing: .16em;
+    }
+    h1 {
+      max-width: 900px;
+      margin: 16px 0 20px;
+      font-size: clamp(42px, 7vw, 68px);
+      line-height: .99;
+      letter-spacing: -.055em;
+    }
+    .lede {
+      max-width: 760px;
+      margin: 0;
+      color: var(--muted);
+      font-size: clamp(18px, 2vw, 22px);
+    }
+    .decision-strip {
+      margin-top: 38px;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      overflow: hidden;
+      background: var(--bg);
+      box-shadow: var(--shadow);
+    }
+    .decision {
+      min-height: 132px;
+      padding: 20px;
+      border-right: 1px solid var(--line);
+    }
+    .decision:last-child { border-right: 0; }
+    .decision-top { display: flex; justify-content: space-between; gap: 10px; align-items: center; }
+    .decision-name { font-weight: 700; }
+    .decision-value { margin-top: 26px; font-size: 24px; font-weight: 700; letter-spacing: -.03em; }
+    .decision-note { color: var(--muted); font-size: 13px; margin-top: 3px; }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 9px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+    .tag.yes, .tag.key, .tag.local, .tag.risk { color: var(--ink); background: transparent; }
+
+    section { padding: 58px 0; }
+    .section-head {
+      display: grid;
+      grid-template-columns: minmax(0, .8fr) minmax(320px, 1.2fr);
+      gap: 48px;
+      align-items: end;
+      margin-bottom: 28px;
+    }
+    h2 { margin: 8px 0 0; font-size: clamp(30px, 4vw, 50px); letter-spacing: -.045em; line-height: 1.05; }
+    h3 { margin: 0; font-size: 19px; letter-spacing: -.02em; }
+    .section-copy { color: var(--muted); font-size: 16px; margin: 0; }
+
+    .architecture {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 30px;
+      background: var(--bg);
+      box-shadow: var(--shadow);
+    }
+    .arch-row {
+      display: grid;
+      grid-template-columns: 1fr 48px 1.15fr 48px 1.45fr 48px 1fr;
+      gap: 10px;
+      align-items: stretch;
+    }
+    .node {
+      min-height: 148px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface);
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+    .node.highlight { background: var(--surface-2); border-color: #666; }
+    .node-kicker { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .12em; }
+    .node-title { font-size: 18px; font-weight: 700; margin-top: 7px; }
+    .node-body { color: var(--muted); font-size: 13px; margin-top: 16px; }
+    .arrow { display: grid; place-items: center; color: var(--lime); font-size: 27px; }
+    .adapter-stack { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 10px; }
+    .adapter {
+      padding: 9px 10px;
+      border-radius: 4px;
+      background: var(--surface-3);
+      font-size: 12px;
+      text-align: center;
+    }
+    .security-rail {
+      margin-top: 20px;
+      padding-top: 20px;
+      border-top: 1px solid var(--line);
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+    }
+    .rail-item { display: flex; gap: 10px; align-items: flex-start; color: var(--muted); font-size: 13px; }
+    .check {
+      flex: 0 0 20px;
+      height: 20px;
+      display: grid;
+      place-items: center;
+      border-radius: 3px;
+      color: #000;
+      background: var(--lime);
+      font-size: 12px;
+      font-weight: 900;
+    }
+
+    .matrix-wrap { overflow-x: auto; border-top: 1px solid var(--line); }
+    .matrix { width: 100%; border-collapse: collapse; min-width: 790px; }
+    .matrix th, .matrix td { padding: 18px 14px; text-align: left; border-bottom: 1px solid var(--line); vertical-align: top; }
+    .matrix th { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .1em; font-weight: 700; }
+    .matrix td { font-size: 14px; }
+    .matrix .provider { font-size: 17px; font-weight: 700; }
+    .matrix small { display: block; color: var(--muted); margin-top: 5px; }
+
+    .flows { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; }
+    .flow {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 22px;
+      background: var(--bg);
+    }
+    .flow-head { display: flex; justify-content: space-between; align-items: center; gap: 14px; margin-bottom: 22px; }
+    .flow-track { display: grid; grid-template-columns: 1fr 24px 1fr 24px 1fr; align-items: center; gap: 6px; }
+    .step {
+      min-height: 104px;
+      padding: 12px;
+      background: var(--surface-2);
+      border-radius: 4px;
+    }
+    .step-num { color: var(--lime); font: 700 11px/1 "SFMono-Regular", Consolas, monospace; }
+    .step strong { display: block; font-size: 13px; margin-top: 9px; }
+    .step span { display: block; color: var(--muted); font-size: 11px; margin-top: 5px; }
+    .mini-arrow { color: var(--muted); text-align: center; }
+    .flow-foot { margin-top: 16px; color: var(--muted); font-size: 12px; }
+    .flow-foot strong { color: var(--ink); }
+
+    .data-contract {
+      display: grid;
+      grid-template-columns: .95fr 1.05fr;
+      gap: 20px;
+      align-items: stretch;
+    }
+    .code-panel {
+      border-radius: var(--radius);
+      background: #050505;
+      border: 1px solid var(--line);
+      padding: 22px;
+      overflow: hidden;
+    }
+    .code-dots { display: flex; gap: 6px; margin-bottom: 18px; }
+    .code-dots i { width: 8px; height: 8px; border-radius: 50%; background: var(--line); }
+    pre { margin: 0; overflow-x: auto; color: #d1d1d1; font: 12px/1.7 "SFMono-Regular", Consolas, monospace; }
+    pre .k { color: var(--cyan); }
+    pre .s { color: var(--lime); }
+    pre .c { color: #777; }
+    .contract-notes { display: grid; gap: 12px; }
+    .contract-note { padding: 18px; border-left: 2px solid var(--line); background: transparent; }
+    .contract-note strong { display: block; margin-bottom: 5px; }
+    .contract-note span { color: var(--muted); font-size: 13px; }
+
+    .timeline { position: relative; margin-top: 10px; }
+    .timeline:before { content: ""; position: absolute; left: 18px; top: 24px; bottom: 24px; width: 1px; background: var(--line); }
+    .phase { position: relative; display: grid; grid-template-columns: 38px 150px 1fr 190px; gap: 18px; align-items: start; padding: 18px 0; }
+    .phase-dot {
+      position: relative;
+      z-index: 1;
+      width: 38px;
+      height: 38px;
+      display: grid;
+      place-items: center;
+      border-radius: 3px;
+      background: var(--surface-3);
+      border: 1px solid var(--line);
+      color: var(--lime);
+      font: 700 12px/1 "SFMono-Regular", Consolas, monospace;
+    }
+    .phase-name { font-weight: 700; padding-top: 7px; }
+    .phase-build { color: var(--muted); padding-top: 7px; font-size: 14px; }
+    .phase-proof { padding-top: 7px; font-size: 12px; color: var(--cyan); }
+
+    .split { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    .list-panel { border-top: 1px solid var(--line); }
+    .list-row { display: grid; grid-template-columns: 26px 1fr; gap: 12px; padding: 16px 0; border-bottom: 1px solid var(--line); }
+    .list-icon { color: var(--lime); font-weight: 800; }
+    .list-row strong { display: block; font-size: 14px; }
+    .list-row span { display: block; color: var(--muted); font-size: 13px; margin-top: 3px; }
+    .risk-panel .list-icon { color: var(--amber); }
+
+    .ship {
+      margin: 60px 0 84px;
+      display: grid;
+      grid-template-columns: 1.2fr .8fr;
+      gap: 30px;
+      align-items: center;
+      padding: 34px;
+      border-radius: var(--radius);
+      background: var(--lime);
+      color: #000;
+    }
+    .ship h2 { margin: 0; max-width: 630px; }
+    .ship p { margin: 12px 0 0; color: rgba(0,0,0,.68); max-width: 650px; }
+    .ship-order { display: grid; gap: 8px; }
+    .ship-order div { display: flex; justify-content: space-between; border-bottom: 1px solid rgba(0,0,0,.2); padding: 8px 0; font-size: 13px; }
+    .ship-order span:first-child { font-weight: 700; }
+
+    footer { padding: 0 0 50px; color: var(--muted); font-size: 12px; }
+
+    @media (max-width: 920px) {
+      .decision-strip { grid-template-columns: repeat(2, 1fr); }
+      .decision:nth-child(2) { border-right: 0; }
+      .decision:nth-child(-n+2) { border-bottom: 1px solid var(--line); }
+      .arch-row { grid-template-columns: 1fr; }
+      .arrow { transform: rotate(90deg); min-height: 32px; }
+      .security-rail { grid-template-columns: repeat(2, 1fr); }
+      .flows { grid-template-columns: 1fr; }
+      .phase { grid-template-columns: 38px 130px 1fr; }
+      .phase-proof { grid-column: 3; padding-top: 0; }
+    }
+
+    @media (max-width: 680px) {
+      .shell { width: min(100% - 22px, 1180px); }
+      nav { display: none; }
+      header { padding-top: 56px; }
+      .decision-strip { grid-template-columns: 1fr; }
+      .decision { border-right: 0; border-bottom: 1px solid var(--line); }
+      .decision:last-child { border-bottom: 0; }
+      .section-head { grid-template-columns: 1fr; gap: 18px; }
+      .architecture { padding: 18px; }
+      .security-rail { grid-template-columns: 1fr; }
+      .adapter-stack { grid-template-columns: 1fr 1fr; }
+      .flow-track { grid-template-columns: 1fr; }
+      .mini-arrow { transform: rotate(90deg); }
+      .data-contract, .split, .ship { grid-template-columns: 1fr; }
+      .phase { grid-template-columns: 38px 1fr; gap: 12px; }
+      .phase-build, .phase-proof { grid-column: 2; padding-top: 0; }
+    }
+
+    /* Editorial layout: narrow, quiet, and vertically paced. */
+    .shell { width: min(760px, calc(100% - 40px)); }
+    .topbar { display: none; }
+    header { padding: 144px 0 96px; }
+    h1 { max-width: 720px; font-size: clamp(46px, 8vw, 64px); }
+    .lede { max-width: 680px; }
+
+    .decision-strip {
+      display: block;
+      margin-top: 56px;
+      border-width: 1px 0;
+      border-radius: 0;
+      overflow: visible;
+    }
+    .decision {
+      min-height: 0;
+      padding: 20px 0;
+      border-right: 0;
+      border-bottom: 1px solid var(--line);
+    }
+    .decision:last-child { border-bottom: 0; }
+    .decision-value { margin-top: 10px; font-size: 20px; }
+
+    section {
+      padding: 80px 0;
+      border-top: 1px solid var(--line);
+    }
+    .section-head { display: block; margin-bottom: 42px; }
+    .section-copy { margin-top: 18px; max-width: 650px; }
+
+    .architecture {
+      border: 0;
+      border-radius: 0;
+      padding: 0;
+      background: transparent;
+    }
+    .arch-row { grid-template-columns: 1fr; gap: 0; }
+    .arrow { min-height: 42px; transform: rotate(90deg); font-size: 20px; }
+    .node,
+    .node.highlight {
+      min-height: 0;
+      padding: 20px 0;
+      border-width: 1px 0 0;
+      border-color: var(--line);
+      border-radius: 0;
+      background: transparent;
+    }
+    .arch-row .node:last-child { border-bottom: 1px solid var(--line); }
+    .node-body { max-width: 600px; }
+    .adapter { border: 1px solid var(--line); background: transparent; }
+    .security-rail { grid-template-columns: 1fr 1fr; margin-top: 34px; padding-top: 28px; }
+
+    .flows { display: block; }
+    .flow {
+      padding: 30px 0;
+      border-width: 1px 0 0;
+      border-radius: 0;
+      background: transparent;
+    }
+    .flow:last-child { border-bottom: 1px solid var(--line); }
+    .step { padding: 12px 0; border-radius: 0; background: transparent; }
+
+    .data-contract { grid-template-columns: 1fr; gap: 34px; }
+    .code-panel { border-radius: 0; border-width: 1px 0; padding: 24px 0; background: transparent; }
+    .contract-note { padding: 14px 0 14px 18px; }
+
+    .phase { grid-template-columns: 38px 125px 1fr; }
+    .phase-proof { grid-column: 3; padding-top: 0; }
+    .phase-dot { border-radius: 3px; }
+
+    .split { grid-template-columns: 1fr; gap: 64px; }
+    .ship {
+      grid-template-columns: 1fr;
+      margin: 80px 0 0;
+      padding: 72px 0;
+      border-top: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+      border-radius: 0;
+      background: transparent;
+      color: var(--ink);
+    }
+    .ship p { color: var(--muted); }
+    .ship-order div { border-bottom-color: var(--line); }
+    footer { padding: 80px 0 144px; }
+
+    @media (max-width: 680px) {
+      .shell { width: min(100% - 32px, 760px); }
+      header { padding: 104px 0 76px; }
+      section { padding: 64px 0; }
+      .security-rail { grid-template-columns: 1fr; }
+      .flow-track { grid-template-columns: 1fr; }
+      .phase { grid-template-columns: 38px 1fr; }
+      .phase-name, .phase-build, .phase-proof { grid-column: 2; }
+      .phase-name { margin-top: -42px; min-height: 42px; }
+      .ship { padding: 64px 0; }
+      footer { padding-bottom: 104px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="shell topbar-inner">
+      <div class="brand"><span class="brand-mark">JU</span> just-usage</div>
+      <nav aria-label="Page sections">
+        <a href="#architecture">Architecture</a>
+        <a href="#providers">Providers</a>
+        <a href="#flows">Account flows</a>
+        <a href="#roadmap">Build order</a>
+        <a href="#guardrails">Guardrails</a>
+      </nav>
+    </div>
+  </div>
+
+  <main class="shell">
+    <header>
+      <div class="eyebrow">Architecture decision · v1</div>
+      <h1>Many accounts in.<br>One honest quota view out.</h1>
+      <p class="lede">A local-only CLI that connects to each provider in the way that provider already understands, then turns four different quota shapes into one simple page.</p>
+
+      <div class="decision-strip" aria-label="Provider authentication summary">
+        <div class="decision">
+          <div class="decision-top"><span class="decision-name">Codex</span><span class="tag yes">OAuth</span></div>
+          <div class="decision-value">Multiple</div>
+          <div class="decision-note">One isolated Codex profile per account</div>
+        </div>
+        <div class="decision">
+          <div class="decision-top"><span class="decision-name">Claude</span><span class="tag yes">OAuth</span></div>
+          <div class="decision-value">Multiple</div>
+          <div class="decision-note">One isolated Claude profile per account</div>
+        </div>
+        <div class="decision">
+          <div class="decision-top"><span class="decision-name">Cursor</span><span class="tag local">Local login</span></div>
+          <div class="decision-value">Single</div>
+          <div class="decision-note">Use only the active Cursor CLI account</div>
+        </div>
+        <div class="decision">
+          <div class="decision-top"><span class="decision-name">OpenCode Go</span><span class="tag key">API key</span></div>
+          <div class="decision-value">Multiple</div>
+          <div class="decision-note">One key per Go account</div>
+        </div>
+      </div>
+    </header>
+
+    <section id="architecture">
+      <div class="section-head">
+        <div><div class="eyebrow">01 · System map</div><h2>Secrets stop at the adapter.</h2></div>
+        <p class="section-copy">The browser sees normalized quota data only. Authentication and provider quirks remain inside the local CLI process.</p>
+      </div>
+
+      <div class="architecture">
+        <div class="arch-row">
+          <div class="node">
+            <div><div class="node-kicker">User surface</div><div class="node-title">Local browser</div></div>
+            <div class="node-body">Cards, percentages, reset times, account labels, and a manual Refresh button.</div>
+          </div>
+          <div class="arrow" aria-hidden="true">↔</div>
+          <div class="node highlight">
+            <div><div class="node-kicker">Local core</div><div class="node-title">just-usage server</div></div>
+            <div class="node-body"><code>127.0.0.1:8787</code><br>Discovery · cache · fan-out · normalization</div>
+          </div>
+          <div class="arrow" aria-hidden="true">↔</div>
+          <div class="node">
+            <div><div class="node-kicker">Isolation boundary</div><div class="node-title">Provider adapters</div></div>
+            <div class="adapter-stack">
+              <div class="adapter">Codex</div><div class="adapter">Claude</div>
+              <div class="adapter">Cursor</div><div class="adapter">OpenCode Go</div>
+            </div>
+          </div>
+          <div class="arrow" aria-hidden="true">↔</div>
+          <div class="node">
+            <div><div class="node-kicker">Provider-owned truth</div><div class="node-title">Quota services</div></div>
+            <div class="node-body">Live windows and resets fetched per account. One adapter failing never takes down the page.</div>
+          </div>
+        </div>
+
+        <div class="security-rail" aria-label="Security boundary">
+          <div class="rail-item"><span class="check">✓</span><span>Loopback only; never binds to the LAN.</span></div>
+          <div class="rail-item"><span class="check">✓</span><span>Tokens never enter browser responses.</span></div>
+          <div class="rail-item"><span class="check">✓</span><span>Metadata and secrets stored separately.</span></div>
+          <div class="rail-item"><span class="check">✓</span><span>No token, header, or response-body logging.</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="providers">
+      <div class="section-head">
+        <div><div class="eyebrow">02 · Provider matrix</div><h2>Four providers. Three auth shapes.</h2></div>
+        <p class="section-copy">“OAuth everywhere” is not the goal. Accurate quota with the smallest credential surface is.</p>
+      </div>
+
+      <div class="matrix-wrap">
+        <table class="matrix">
+          <thead>
+            <tr><th>Provider</th><th>Connect</th><th>Accounts</th><th>Quota source</th><th>What we can show</th><th>Risk</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="provider">Codex</td>
+              <td><span class="tag yes">OAuth</span><small>via isolated <code>codex app-server</code> profile</small></td>
+              <td>Multiple</td>
+              <td><code>account/rateLimits/read</code></td>
+              <td>All windows, reset times, plan, banked reset count and details</td>
+              <td><span class="tag yes">Supported</span></td>
+            </tr>
+            <tr>
+              <td class="provider">Claude</td>
+              <td><span class="tag yes">OAuth</span><small>via isolated Claude CLI profile</small></td>
+              <td>Multiple</td>
+              <td>Claude usage endpoint using CLI-owned token</td>
+              <td>Live session/week windows and reset times, when returned</td>
+              <td><span class="tag risk">Private API</span></td>
+            </tr>
+            <tr>
+              <td class="provider">Cursor</td>
+              <td><span class="tag local">Local login</span><small><code>cursor-agent</code> active account</small></td>
+              <td>One</td>
+              <td>Cursor account usage surface; confirm in technical spike</td>
+              <td>Whatever the current account exposes—never estimated as quota</td>
+              <td><span class="tag risk">Spike first</span></td>
+            </tr>
+            <tr>
+              <td class="provider">OpenCode Go</td>
+              <td><span class="tag key">API key</span><small>add or import a Go key</small></td>
+              <td>Multiple</td>
+              <td><code>GET /zen/go/v1/usage</code></td>
+              <td>5-hour, weekly, monthly percentages and reset times</td>
+              <td><span class="tag yes">Direct</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="flows">
+      <div class="section-head">
+        <div><div class="eyebrow">03 · Account flows</div><h2>What “connect” actually does.</h2></div>
+        <p class="section-copy">Every flow ends in the same quota contract, but credentials remain in the safest provider-appropriate home.</p>
+      </div>
+
+      <div class="flows">
+        <article class="flow">
+          <div class="flow-head"><h3>Codex · add account</h3><span class="tag yes">OAuth</span></div>
+          <div class="flow-track">
+            <div class="step"><span class="step-num">01</span><strong>Create profile</strong><span>Isolated local Codex state for this account.</span></div>
+            <div class="mini-arrow">→</div>
+            <div class="step"><span class="step-num">02</span><strong>Browser login</strong><span>App Server owns the OAuth flow and token refresh.</span></div>
+            <div class="mini-arrow">→</div>
+            <div class="step"><span class="step-num">03</span><strong>Read limits</strong><span>Fetch windows plus banked reset credits.</span></div>
+          </div>
+          <div class="flow-foot"><strong>Stored by us:</strong> profile ID, label, and path—not copied OAuth tokens.</div>
+        </article>
+
+        <article class="flow">
+          <div class="flow-head"><h3>Claude · add account</h3><span class="tag yes">OAuth</span></div>
+          <div class="flow-track">
+            <div class="step"><span class="step-num">01</span><strong>Create profile</strong><span>Separate Claude config directory per account.</span></div>
+            <div class="mini-arrow">→</div>
+            <div class="step"><span class="step-num">02</span><strong>CLI login</strong><span>Claude owns login, refresh, and credential file.</span></div>
+            <div class="mini-arrow">→</div>
+            <div class="step"><span class="step-num">03</span><strong>Read usage</strong><span>Use the token in memory; discard after fetch.</span></div>
+          </div>
+          <div class="flow-foot"><strong>Fragile seam:</strong> the usage endpoint is private, so schema changes become a gray card—not bad data.</div>
+        </article>
+
+        <article class="flow">
+          <div class="flow-head"><h3>Cursor · discover account</h3><span class="tag local">Single</span></div>
+          <div class="flow-track">
+            <div class="step"><span class="step-num">01</span><strong>Detect CLI</strong><span>Find <code>cursor-agent</code> on PATH.</span></div>
+            <div class="mini-arrow">→</div>
+            <div class="step"><span class="step-num">02</span><strong>Check status</strong><span>Use its current local authentication only.</span></div>
+            <div class="mini-arrow">→</div>
+            <div class="step"><span class="step-num">03</span><strong>Probe quota</strong><span>Show live truth or “unsupported”—never infer.</span></div>
+          </div>
+          <div class="flow-foot"><strong>Deliberate limit:</strong> no Cursor account vault and no account switching in v1.</div>
+        </article>
+
+        <article class="flow">
+          <div class="flow-head"><h3>OpenCode Go · add account</h3><span class="tag key">API key</span></div>
+          <div class="flow-track">
+            <div class="step"><span class="step-num">01</span><strong>Add or import</strong><span>Paste a Go key or import the existing one.</span></div>
+            <div class="mini-arrow">→</div>
+            <div class="step"><span class="step-num">02</span><strong>Store safely</strong><span>Key goes to the OS secret store.</span></div>
+            <div class="mini-arrow">→</div>
+            <div class="step"><span class="step-num">03</span><strong>Read usage</strong><span>Query each key's server-side windows.</span></div>
+          </div>
+          <div class="flow-foot"><strong>De-duplication:</strong> ordinary OpenCode OpenAI/Claude credentials map to those provider cards; only Go is its own card.</div>
+        </article>
+      </div>
+    </section>
+
+    <section id="contract">
+      <div class="section-head">
+        <div><div class="eyebrow">04 · Shared contract</div><h2>The UI stays intentionally dumb.</h2></div>
+        <p class="section-copy">Adapters translate provider responses once. Everything after that operates on one predictable shape.</p>
+      </div>
+
+      <div class="data-contract">
+        <div class="code-panel" aria-label="Normalized quota data structure">
+          <div class="code-dots"><i></i><i></i><i></i></div>
+<pre><span class="k">type</span> QuotaSnapshot = {
+  account: {
+    id: <span class="s">"codex:personal"</span>,
+    provider: <span class="s">"codex"</span>,
+    label: <span class="s">"Personal"</span>,
+    plan?: <span class="s">"pro"</span>
+  },
+  windows: [{
+    label: <span class="s">"5 hours"</span>,
+    usedPercent: 42,
+    resetsAt: <span class="s">"2026-09-04T18:00:00Z"</span>
+  }],
+  resetCredits?: {
+    availableCount: 2,
+    details?: [{ expiresAt, status }]
+  },
+  status: <span class="s">"ok"</span> | <span class="s">"unsupported"</span> | <span class="s">"error"</span>,
+  fetchedAt: <span class="s">"…"</span>
+}</pre>
+        </div>
+        <div class="contract-notes">
+          <div class="contract-note"><strong>Percentages keep their meaning</strong><span>Store both provider value and display direction. Do not accidentally turn “used” into “remaining.”</span></div>
+          <div class="contract-note"><strong>Unknown is a valid state</strong><span>Missing reset time, plan, or credits stays absent. We never manufacture a number.</span></div>
+          <div class="contract-note"><strong>Errors are per account</strong><span>One expired Claude login does not hide three healthy Codex accounts.</span></div>
+          <div class="contract-note"><strong>Identity is stable</strong><span>Dedupe with provider account IDs when available; labels can change without creating duplicate cards.</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="roadmap">
+      <div class="section-head">
+        <div><div class="eyebrow">05 · Build order</div><h2>Prove the hard seams early.</h2></div>
+        <p class="section-copy">Each phase ends with something runnable. The riskiest unknown—Cursor quota access—is isolated before it can distort the rest of the build.</p>
+      </div>
+
+      <div class="timeline">
+        <div class="phase">
+          <div class="phase-dot">0</div><div class="phase-name">Foundation</div>
+          <div class="phase-build">Package, CLI commands, localhost server, account registry, secret-store interface, adapter contract, fixtures.</div>
+          <div class="phase-proof">Proof: one mocked card renders</div>
+        </div>
+        <div class="phase">
+          <div class="phase-dot">1</div><div class="phase-name">Codex vertical</div>
+          <div class="phase-build">Add/list/remove accounts, isolated OAuth profiles, rate-limit reads, multi-bucket normalization, banked reset display.</div>
+          <div class="phase-proof">Proof: two Codex accounts refresh</div>
+        </div>
+        <div class="phase">
+          <div class="phase-dot">2</div><div class="phase-name">Claude vertical</div>
+          <div class="phase-build">Isolated CLI profiles, multi-account login, usage fetch, cache, expiry handling, schema fixtures and safe degradation.</div>
+          <div class="phase-proof">Proof: stale token cannot crash server</div>
+        </div>
+        <div class="phase">
+          <div class="phase-dot">3</div><div class="phase-name">OpenCode Go</div>
+          <div class="phase-build">Add/import keys, keychain storage, per-key usage request, rolling/weekly/monthly windows, dedupe rules.</div>
+          <div class="phase-proof">Proof: two Go keys stay isolated</div>
+        </div>
+        <div class="phase">
+          <div class="phase-dot">4</div><div class="phase-name">Cursor spike</div>
+          <div class="phase-build">Confirm active-account identity and authoritative quota source. Ship exact data if available; otherwise ship a clear unsupported state.</div>
+          <div class="phase-proof">Proof: no guessed quota values</div>
+        </div>
+        <div class="phase">
+          <div class="phase-dot">5</div><div class="phase-name">Product hardening</div>
+          <div class="phase-build">Manual refresh, bounded concurrency, timeouts, redacted diagnostics, responsive page, lifecycle cleanup, packaging.</div>
+          <div class="phase-proof">Proof: <code>npx just-usage</code></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="guardrails">
+      <div class="section-head">
+        <div><div class="eyebrow">06 · Guardrails</div><h2>Ship trust before features.</h2></div>
+        <p class="section-copy">This tool handles high-value credentials. The safe failure mode is less data, never leaked data or confident fiction.</p>
+      </div>
+
+      <div class="split">
+        <div>
+          <h3>Must be true at launch</h3>
+          <div class="list-panel">
+            <div class="list-row"><div class="list-icon">✓</div><div><strong>No secrets in browser or logs</strong><span>Sanitize commands, headers, stack traces, and raw provider bodies.</span></div></div>
+            <div class="list-row"><div class="list-icon">✓</div><div><strong>No silent background polling</strong><span>Manual refresh; short provider-aware caches and backoff.</span></div></div>
+            <div class="list-row"><div class="list-icon">✓</div><div><strong>Read-only quota product</strong><span>Display banked Codex resets, but do not redeem them in v1.</span></div></div>
+            <div class="list-row"><div class="list-icon">✓</div><div><strong>Account lifecycle works</strong><span>Add, label, refresh, re-authenticate, and remove without orphaned secrets.</span></div></div>
+          </div>
+        </div>
+        <div class="risk-panel">
+          <h3>Known risks to contain</h3>
+          <div class="list-panel">
+            <div class="list-row"><div class="list-icon">!</div><div><strong>Claude endpoint drift</strong><span>Fixture-based parser tests, feature detection, and one gray card on breakage.</span></div></div>
+            <div class="list-row"><div class="list-icon">!</div><div><strong>Cursor may expose no quota API</strong><span>Time-box the spike; “signed in, quota unsupported” is an acceptable result.</span></div></div>
+            <div class="list-row"><div class="list-icon">!</div><div><strong>Credential-store portability</strong><span>Keep a SecretStore interface; support platforms deliberately, never with a plaintext fallback.</span></div></div>
+            <div class="list-row"><div class="list-icon">!</div><div><strong>Provider throttling</strong><span>Per-account cache, bounded fan-out, retry only transient failures.</span></div></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div class="ship">
+      <div>
+        <h2>Start with Codex, design for every account.</h2>
+        <p>The first vertical slice validates the whole architecture: connect, isolate, fetch, normalize, cache, render, remove. Claude and OpenCode Go then plug into proven seams.</p>
+      </div>
+      <div class="ship-order" aria-label="Release priority">
+        <div><span>1 · Codex</span><span>complete truth</span></div>
+        <div><span>2 · Claude</span><span>managed risk</span></div>
+        <div><span>3 · OpenCode Go</span><span>direct API</span></div>
+        <div><span>4 · Cursor</span><span>single account</span></div>
+      </div>
+    </div>
+  </main>
+
+  <footer class="shell">just-usage architecture plan · Local-first · Read-only v1 · September 2026</footer>
+</body>
+</html>

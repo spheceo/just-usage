@@ -1,0 +1,48 @@
+{
+  "name": "just-usage",
+  "version": "0.1.0",
+  "description": "One local page for your coding-CLI subscription quotas: Claude, Codex, Cursor, OpenCode Go.",
+  "type": "module",
+  "license": "MIT",
+  "author": "spheceo",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/spheceo/just-usage.git"
+  },
+  "homepage": "https://github.com/spheceo/just-usage#readme",
+  "bugs": "https://github.com/spheceo/just-usage/issues",
+  "keywords": [
+    "claude",
+    "codex",
+    "cursor",
+    "opencode",
+    "quota",
+    "usage",
+    "rate-limit",
+    "cli"
+  ],
+  "bin": {
+    "just-usage": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "bun run src/cli.ts",
+    "build": "bun run scripts/build.ts",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit",
+    "release": "bun run scripts/release.ts",
+    "prepublishOnly": "bun run build"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.2.0",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.6.0"
+  }
+}

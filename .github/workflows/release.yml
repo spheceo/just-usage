@@ -1,0 +1,51 @@
+name: release
+
+# Triggered by `bun run release <bump>` pushing a v* tag.
+# Publishes to npm via trusted publishing (OIDC; no NPM_TOKEN needed once the
+# repo is configured as a trusted publisher for the package), then creates the
+# GitHub Release that `just-usage upgrade` checks against.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - run: bun install --frozen-lockfile
+      - run: bun run typecheck
+      - run: bun test
+      - run: bun run build
+
+      - name: verify tag matches package.json
+        run: |
+          PKG_VERSION="$(node -p "require('./package.json').version")"
+          if [ "v$PKG_VERSION" != "${GITHUB_REF_NAME}" ]; then
+            echo "tag ${GITHUB_REF_NAME} does not match package.json version $PKG_VERSION"; exit 1
+          fi
+
+      # Trusted publishing requires npm >= 11.5.1.
+      - run: npm install -g npm@latest
+      - run: npm publish --provenance --access public
+
+      - name: create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          npm pack --silent
+          gh release create "${GITHUB_REF_NAME}" ./*.tgz \
+            --title "${GITHUB_REF_NAME}" \
+            --generate-notes \
+            --notes "Install or update: \`npm i -g just-usage@${GITHUB_REF_NAME#v}\` (or \`just-usage upgrade\`)."
