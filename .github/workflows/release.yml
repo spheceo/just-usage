@@ -1,9 +1,13 @@
 name: release
 
 # Triggered by `bun run release` (patch by default) pushing a v* tag.
-# Publishes to npm via trusted publishing (OIDC; no NPM_TOKEN needed once the
-# repo is configured as a trusted publisher for the package), then creates the
-# GitHub Release that `just-usage upgrade` checks against.
+# Publishes with npm Trusted Publishing (OIDC). No NPM_TOKEN.
+# On npmjs.com → package → Trusted Publisher, set:
+#   Organization or user: spheceo
+#   Repository: just-usage
+#   Workflow filename: release.yml
+#   Environment: (leave empty)
+#   Allowed actions: npm publish
 on:
   push:
     tags: ["v*"]
@@ -16,14 +20,15 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
+          package-manager-cache: false
       - run: bun install --frozen-lockfile
       - run: bun run typecheck
       - run: bun test
@@ -37,7 +42,7 @@ jobs:
           fi
 
       # Trusted publishing requires npm >= 11.5.1.
-      - run: npm install -g npm@latest
+      - run: npm install -g npm@^11.5.1
       - run: npm publish --provenance --access public
 
       - name: create GitHub release
