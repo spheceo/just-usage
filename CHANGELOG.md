@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.0.6
+
+## What's Changed
+Detect newly installed CLIs on refresh, keep provider tabs out of the URL, and write action logs. in [#3b3f92c](https://github.com/spheceo/just-usage/commit/3b3f92c086e55533da48ebac2023b41ce32d21a3)
+Remove obsolete architecture plan in [#23d08e9](https://github.com/spheceo/just-usage/commit/23d08e96a8a485692062802d3e01886857573af9)
+
 ## v0.0.5
 
 ## What's Changed
