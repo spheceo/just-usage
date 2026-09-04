@@ -227,13 +227,36 @@ export async function fetchAgyEmail(accessToken: string): Promise<string | null>
   return res.body.email;
 }
 
+const GOOGLE_AI_PLANS: Record<string, string> = {
+  "g1-plus-tier": "Plus",
+  "g1-pro-tier": "Pro",
+  "g1-ultra-tier": "Ultra",
+};
+
+/** Product shell names — Code Assist keeps these on currentTier even for Pro/Ultra. */
+const PRODUCT_TIER_NAMES = /^(antigravity|gemini code assist)$/i;
+
+function planFromTier(tier: JsonObject | null): string | null {
+  if (!tier) return null;
+  const id = typeof tier.id === "string" ? tier.id.trim().toLowerCase() : "";
+  if (id && GOOGLE_AI_PLANS[id]) return GOOGLE_AI_PLANS[id];
+  if (id.includes("ultra")) return "Ultra";
+  if (id.includes("pro")) return "Pro";
+  if (id.includes("plus")) return "Plus";
+  const name = typeof tier.name === "string" ? tier.name.trim() : "";
+  if (name && !PRODUCT_TIER_NAMES.test(name)) return name;
+  if (id === "free-tier") return "Free";
+  if (id === "standard-tier") return "Standard";
+  if (id === "legacy-tier") return "Legacy";
+  return name || null;
+}
+
 export function planFromCodeAssist(body: unknown): string | null {
   if (!isObject(body)) return null;
   const current = isObject(body.currentTier) ? body.currentTier : null;
-  if (current && typeof current.name === "string" && current.name.trim()) return current.name.trim();
   const paid = isObject(body.paidTier) ? body.paidTier : null;
-  if (paid && typeof paid.name === "string" && paid.name.trim()) return paid.name.trim();
-  return null;
+  // Google AI Pro/Ultra is paidTier (g1-*-tier). currentTier stays free-tier / "Antigravity".
+  return planFromTier(paid) ?? planFromTier(current);
 }
 
 function windowMinutes(window: string | undefined): number | null {

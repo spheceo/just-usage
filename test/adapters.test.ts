@@ -134,8 +134,20 @@ describe("antigravity", () => {
     expect(normalizeAntigravityQuota(null)).toEqual([]);
   });
 
-  test("reads currentTier name and go-keyring blobs", () => {
-    expect(planFromCodeAssist({ currentTier: { id: "free-tier", name: "Antigravity" } })).toBe("Antigravity");
+  test("reads Google AI plan from paidTier, not the Antigravity product name", () => {
+    expect(planFromCodeAssist({
+      currentTier: { id: "free-tier", name: "Antigravity" },
+      paidTier: { id: "g1-pro-tier", name: "Google AI Pro" },
+    })).toBe("Pro");
+    expect(planFromCodeAssist({
+      currentTier: { id: "free-tier", name: "Antigravity" },
+      paidTier: { id: "g1-ultra-tier", name: "Google AI Ultra" },
+    })).toBe("Ultra");
+    expect(planFromCodeAssist({ currentTier: { id: "free-tier", name: "Antigravity" } })).toBe("Free");
+    expect(planFromCodeAssist({ currentTier: { id: "g1-pro-tier", name: "Google AI Pro" } })).toBe("Pro");
+  });
+
+  test("reads go-keyring blobs", () => {
     const raw = "go-keyring-base64:" + Buffer.from(JSON.stringify({
       token: { access_token: "ya29.abc", refresh_token: "1//xyz", expiry: "2026-09-04T21:40:07.158017+02:00", token_type: "Bearer" },
       auth_method: "consumer",

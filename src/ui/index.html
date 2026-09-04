@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="dark">
 <title>just-usage</title>
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23000'/%3E%3Crect x='7' y='14' width='18' height='4' rx='2' fill='%232a2a2a'/%3E%3Crect x='7' y='14' width='11' height='4' rx='2' fill='%23fff'/%3E%3C/svg%3E">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <style>
   :root {
     --bg: #000;
@@ -417,10 +417,20 @@
     return !!p?.accounts.some((a) => a.status === "ok" || a.status === "error");
   }
 
+  /** true/false = user chose; missing = auto-show when the CLI is signed in. */
+  function explicitEnabled(id) {
+    if (!enabled || typeof enabled !== "object" || !Object.hasOwn(enabled, id)) return null;
+    if (enabled[id] === true) return true;
+    if (enabled[id] === false) return false;
+    return null;
+  }
+
   function visibleIds() {
-    if (enabled) return order.filter((id) => enabled[id]);
-    if (!report) return [];
-    return order.filter((id) => isDefaultVisible(report.providers.find((x) => x.id === id)));
+    return order.filter((id) => {
+      const choice = explicitEnabled(id);
+      if (choice !== null) return choice;
+      return isDefaultVisible(report?.providers.find((x) => x.id === id));
+    });
   }
 
   function ensureActive() {
@@ -507,9 +517,16 @@
     return html;
   }
 
+  function planBadge(provider, plan) {
+    if (!plan) return "";
+    const name = PROVIDERS.find(([id]) => id === provider)?.[1] || provider;
+    if (plan.toLowerCase() === name.toLowerCase() || plan.toLowerCase() === provider) return "";
+    return `<span class="plan">${esc(formatPlan(plan))}</span>`;
+  }
+
   function renderCard(a, provider, index) {
     const title = accountTitle(a, index);
-    const plan = a.account.plan ? `<span class="plan">${esc(formatPlan(a.account.plan))}</span>` : "";
+    const plan = planBadge(provider, a.account.plan);
     let badge = "";
     if (a.status === "ok") {
       let worst = null;
@@ -589,7 +606,7 @@
     }).join("");
     for (const input of $("opts-providers").querySelectorAll("input")) {
       input.onchange = () => {
-        const next = Object.fromEntries(order.map((id) => [id, vis.has(id)]));
+        const next = { ...(enabled || {}) };
         next[input.dataset.id] = input.checked;
         persistEnabled(next);
       };
@@ -1022,7 +1039,10 @@
         for (const a of p.accounts || []) {
           const old = prev?.accounts.find((x) => x.account.id === a.account.id);
           if (!a.account.email && old?.account.email) a.account.email = old.account.email;
-          if (!a.account.plan && old?.account.plan) a.account.plan = old.account.plan;
+          if (!a.account.plan && old?.account.plan) {
+            const name = PROVIDERS.find(([id]) => id === p.id)?.[1] || p.id;
+            if (old.account.plan.toLowerCase() !== name.toLowerCase()) a.account.plan = old.account.plan;
+          }
         }
       }
     }
