@@ -4,7 +4,9 @@ One local page for your coding-CLI subscription quotas. Detects the CLIs install
 
 ```sh
 npm i -g just-usage
-just-usage            # http://<your-host>:5757
+just-usage            # start and open http://<your-host>:5757
+just-usage stop       # stop that server (same as Ctrl+C)
+just-usage stop --help
 ```
 
 ## Providers

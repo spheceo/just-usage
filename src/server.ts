@@ -16,9 +16,11 @@ import {
   submitCodexCallback,
 } from "./accounts.ts";
 import { ReportCache } from "./collect.ts";
-import { CACHE_TTL_MS, VERSION } from "./config.ts";
+import { CACHE_TTL_MS, PACKAGE_NAME, VERSION } from "./config.ts";
+import { removeRunRecord, writeRunRecord } from "./instance.ts";
 import { run } from "./proc.ts";
 import type { ProviderId, UpdateInfo } from "./types.ts";
+import faviconSvg from "./ui/favicon.svg" with { type: "text" };
 import indexHtml from "./ui/index.html" with { type: "text" };
 import antigravityLogo from "./ui/logos/antigravity.svg" with { type: "text" };
 import claudeLogo from "./ui/logos/claude.svg" with { type: "text" };
@@ -99,6 +101,11 @@ export async function startServer(opts: ServerOptions): Promise<{ close: () => v
     res.setHeader("X-Content-Type-Options", "nosniff");
     try {
       const method = req.method ?? "GET";
+      if ((url.pathname === "/favicon.svg" || url.pathname === "/favicon.ico") && (method === "GET" || method === "HEAD")) {
+        res.writeHead(200, { "Content-Type": "image/svg+xml; charset=utf-8", "Cache-Control": "public, max-age=86400" });
+        res.end(faviconSvg);
+        return;
+      }
       if (url.pathname === "/" && (method === "GET" || method === "HEAD")) {
         res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
         res.end(indexHtml);
@@ -121,7 +128,7 @@ export async function startServer(opts: ServerOptions): Promise<{ close: () => v
         return;
       }
       if (url.pathname === "/api/health" && (method === "GET" || method === "HEAD")) {
-        json(res, 200, { ok: true, version: VERSION });
+        json(res, 200, { ok: true, name: PACKAGE_NAME, version: VERSION, pid: process.pid });
         return;
       }
       if (url.pathname === "/api/accounts" && method === "POST") {
@@ -215,7 +222,14 @@ export async function startServer(opts: ServerOptions): Promise<{ close: () => v
   return new Promise((resolve, reject) => {
     server.once("error", reject);
     server.listen(opts.port, opts.host, () => {
-      resolve({ close: () => server.close(), urls: reachableUrls(opts.host, opts.port, tailscaleIp) });
+      writeRunRecord({ port: opts.port, host: opts.host });
+      resolve({
+        close: () => {
+          removeRunRecord(opts.port);
+          server.close();
+        },
+        urls: reachableUrls(opts.host, opts.port, tailscaleIp),
+      });
     });
   });
 }

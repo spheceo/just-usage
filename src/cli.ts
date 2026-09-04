@@ -8,6 +8,7 @@ import { collectReport } from "./collect.ts";
 import { DEFAULT_HOST, DEFAULT_PORT, PACKAGE_NAME, VERSION, ensureDir } from "./config.ts";
 import { openInBrowser, runInteractive, which } from "./proc.ts";
 import { getAccount, listAccounts, newAccountId, profileDirFor, saveAccount, updateAccount } from "./registry.ts";
+import { formatStopResults, stopServers } from "./instance.ts";
 import { startServer } from "./server.ts";
 import { renderReport } from "./terminal.ts";
 import { PROVIDERS, providerName, type ProviderId, type UpdateInfo } from "./types.ts";
@@ -22,6 +23,9 @@ Usage
       --port <n>                 Port (default ${DEFAULT_PORT})
       --host <addr>              Bind address (default ${DEFAULT_HOST}; use 127.0.0.1 for local only)
       --no-open                  Don't open a browser
+  just-usage stop [options]      Stop a running just-usage server
+      --port <n>                 Port (default ${DEFAULT_PORT})
+      --all                      Stop every just-usage server this CLI started
   just-usage status [--json]     Print quotas in the terminal
   just-usage accounts            List accounts
   just-usage add <provider>      Add an account (codex | claude | opencode | antigravity)
@@ -31,11 +35,58 @@ Usage
   just-usage remove <account-id> Remove an account and anything we stored for it
   just-usage upgrade [--check]   Update to the latest release
   just-usage --version
+  just-usage stop --help         More on stopping a running server
 
 Providers: ${PROVIDERS.map((p) => p.name).join(", ")}
 Cursor uses whatever \`cursor-agent\` is logged in as (single account).
 Grok uses whatever \`grok login --oauth\` stored (single account).
 Antigravity extras are extra Google logins; they do not replace \`agy\`'s signed-in account.
+
+Stop
+  \`just-usage stop\` asks the server to exit — the same as Ctrl+C in the terminal
+  that started it. Use this when that terminal is gone or another instance is
+  still holding the port.
+
+  just-usage stop                Stop the default server (port ${DEFAULT_PORT})
+  just-usage stop --port 5758    Stop a server you started on another port
+  just-usage stop --all          Stop every just-usage server recorded here
+
+  It only stops a process it can confirm is just-usage (pid file, health route,
+  or command line). An unrelated process on the same port is left alone.
+`;
+
+const STOP_HELP = `${PACKAGE_NAME} stop
+Stop a running just-usage server.
+
+Usage
+  just-usage stop
+  just-usage stop --port <n>
+  just-usage stop --all
+
+What it does
+  The server writes a small pid file under ~/.config/just-usage/run/ when it
+  starts. \`stop\` reads that file and asks the process to exit (SIGTERM, then
+  SIGKILL if it ignores the first signal).
+
+  If the pid file is missing or stale — for example after a crash — \`stop\`
+  looks for a listener on the port and checks GET /api/health. Only a confirmed
+  just-usage server is stopped.
+
+Options
+  --port <n>     Port the server is bound to (default ${DEFAULT_PORT})
+  --all          Stop every just-usage server this CLI has a pid file for,
+                 plus the default port if that is still running
+  --help, -h     Show this help
+
+Examples
+  just-usage stop
+  just-usage serve --port 5758
+  just-usage stop --port 5758
+  just-usage stop --all
+
+See also
+  just-usage serve               Start the server
+  just-usage --help              All commands
 `;
 
 function fail(msg: string, code = 1): never {
@@ -101,7 +152,10 @@ async function cmdServe(argv: string[]) {
     server = await startServer({ host, port, getUpdate: () => update });
   } catch (e) {
     const code = (e as NodeJS.ErrnoException).code;
-    if (code === "EADDRINUSE") fail(`Port ${port} is already in use. Try: just-usage serve --port ${port + 1}`);
+    if (code === "EADDRINUSE") {
+      const stop = port === DEFAULT_PORT ? "just-usage stop" : `just-usage stop --port ${port}`;
+      fail(`Port ${port} is already in use. Stop it with: ${stop}\nOr start another: just-usage serve --port ${port + 1}`);
+    }
     throw e;
   }
   console.log(`${PACKAGE_NAME} v${VERSION}`);
@@ -109,7 +163,8 @@ async function cmdServe(argv: string[]) {
     const tag = u.kind === "local" ? "local    " : u.kind === "tailscale" ? "tailscale" : "network  ";
     console.log(`  ${tag} ${u.url}`);
   }
-  console.log(`\nPress Ctrl+C to stop.`);
+  const stopHint = port === DEFAULT_PORT ? "just-usage stop" : `just-usage stop --port ${port}`;
+  console.log(`\nPress Ctrl+C to stop. From another terminal: ${stopHint}`);
   if (shouldOpen) openInBrowser(server.urls[0]!.url);
 
   const shutdown = () => {
@@ -270,6 +325,27 @@ async function cmdRemove(argv: string[]) {
   }
 }
 
+async function cmdStop(argv: string[]) {
+  if (argv.includes("--help") || argv.includes("-h")) {
+    console.log(STOP_HELP);
+    return;
+  }
+  const { values } = parseArgs({
+    args: argv,
+    options: {
+      port: { type: "string", short: "p" },
+      all: { type: "boolean" },
+    },
+    allowPositionals: true,
+    strict: false,
+  });
+  const port = values.port ? Number(values.port) : undefined;
+  if (values.port && (!Number.isInteger(port) || port! <= 0 || port! > 65535)) fail(`invalid port: ${values.port}`);
+  const { text, code } = formatStopResults(await stopServers({ port, all: values.all === true }));
+  console.log(text);
+  if (code !== 0) process.exit(code);
+}
+
 async function cmdUpgrade(argv: string[]) {
   const { values } = parseArgs({ args: argv, options: { check: { type: "boolean" }, yes: { type: "boolean", short: "y" } }, allowPositionals: true, strict: false });
   const info = await checkForUpdate(true);
@@ -308,6 +384,9 @@ async function main() {
       return cmdServe([]);
     case "serve":
       return cmdServe(argv.slice(1));
+    case "stop":
+    case "quit":
+      return cmdStop(argv.slice(1));
     case "status":
       return cmdStatus(argv.slice(1));
     case "accounts":

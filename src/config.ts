@@ -30,4 +30,6 @@ export const paths = {
   secrets: () => join(configDir(), "secrets.json"),
   updateCache: () => join(configDir(), "update-check.json"),
   profiles: (provider: string) => join(configDir(), "profiles", provider),
+  runDir: () => join(configDir(), "run"),
+  runRecord: (port: number) => join(configDir(), "run", `${port}.json`),
 };
