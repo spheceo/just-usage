@@ -129,7 +129,7 @@
   .opts-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 0; user-select: none; transition: opacity .22s ease; }
   .opts-row.dragging { opacity: .62; cursor: grabbing; }
   .opts-row.dragging .grip { cursor: grabbing; }
-  .opts-email { margin-top: 22px; padding-top: 14px; border-top: 1px solid var(--line); }
+  .opts-email { margin-top: 10px; padding-top: 16px; border-top: 1px solid var(--line); }
   .opts-prov { display: flex; align-items: center; gap: 8px; min-width: 0; }
   .opts-row img.logo { width: 14px; height: 14px; }
   .grip {
@@ -161,11 +161,11 @@
   .seg input { appearance: none; position: absolute; }
   .seg label:has(input:checked) { background: #121212; color: var(--fg); }
   .opts-actions { display: flex; justify-content: flex-end; align-items: center; gap: 12px; padding-top: 2px; }
-  .opts-actions:has(#opts-signed-in:not([hidden])) { justify-content: space-between; }
   .opts-link { background: none; border: none; color: var(--muted); font: inherit; font-size: 12px; cursor: pointer; padding: 0; }
   .opts-link:hover { color: var(--fg); }
   .opts-link[hidden] { display: none; }
   .acct-group { padding-bottom: 12px; }
+  .acct-group:last-child { padding-bottom: 0; }
   .acct-group + .acct-group { border-top: 1px solid var(--line); padding-top: 12px; }
   .acct-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 13px; }
   .acct-head img.logo { width: 14px; height: 14px; }
@@ -182,6 +182,7 @@
     border: 1px solid var(--line); border-radius: 12px;
     padding: 0;
   }
+  dialog.dlg form { margin: 0; }
   dialog.dlg::backdrop { background: rgba(0, 0, 0, .9); }
   .dlg-head {
     display: flex; justify-content: space-between; align-items: center;
@@ -262,7 +263,6 @@
       </label>
     </div>
     <div class="opts-actions">
-      <button class="opts-link" id="opts-signed-in" type="button">Signed-in only</button>
       <button class="refresh" id="refresh" type="button">Refresh data</button>
     </div>
   </div>
@@ -273,11 +273,13 @@
 </div>
 
 <dialog class="dlg" id="add-acct">
-  <div class="dlg-head">
-    <strong id="add-acct-title">Add account</strong>
-    <button class="opts-link" id="add-acct-close" type="button">Close</button>
-  </div>
-  <div class="dlg-body" id="add-acct-body"></div>
+  <form autocomplete="off" onsubmit="return false">
+    <div class="dlg-head">
+      <strong id="add-acct-title">Add account</strong>
+      <button class="opts-link" id="add-acct-close" type="button">Close</button>
+    </div>
+    <div class="dlg-body" id="add-acct-body"></div>
+  </form>
 </dialog>
 
 <script>
@@ -356,6 +358,7 @@
   const sev = (p) => (p == null ? null : p >= 85 ? "crit" : p >= 60 ? "warn" : "ok");
   const rank = { ok: 1, warn: 2, crit: 3 };
   const logo = (id) => `<img class="logo" src="/logos/${id}.svg?v=5" alt="" width="14" height="14">`;
+  const noSuggest = `autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"`;
   const formatPlan = (p) => String(p).replace(/\S+/g, (w) => w.charAt(0).toUpperCase() + w.slice(1));
   const GENERIC_LABELS = new Set(["", "default", "token", "go", "pending", "profile", "account", "codex"]);
   function isGenericLabel(label, email) {
@@ -432,10 +435,8 @@
     if (next) localStorage.setItem("ju.providers", JSON.stringify(next));
     else localStorage.removeItem("ju.providers");
     ensureActive();
-    if (settingsOpen) {
-      renderTabs();
-      $("opts-signed-in").hidden = !enabled;
-    } else render();
+    if (settingsOpen) renderTabs();
+    else render();
   }
 
   function persistOrder(next) {
@@ -651,7 +652,6 @@
         document.addEventListener("pointercancel", stop);
       };
     }
-    $("opts-signed-in").hidden = !enabled;
     for (const input of $("opts-meter").querySelectorAll("input")) {
       input.checked = (input.value === "left") === showLeft;
     }
@@ -682,7 +682,7 @@
         const extra = a.account.kind === "default" ? "from CLI" : a.account.kind;
         if (renaming === a.account.id) {
           return `<div class="acct-row">
-            <span class="acct-rename"><input class="field acct-rename-input" data-id="${esc(a.account.id)}" value="${esc(title)}">
+            <span class="acct-rename"><input class="field acct-rename-input" data-id="${esc(a.account.id)}" value="${esc(title)}" ${noSuggest}>
               <button class="refresh acct-rename-save" type="button" data-id="${esc(a.account.id)}">Save</button></span>
             <button class="opts-link acct-rename-cancel" type="button">Cancel</button>
           </div>`;
@@ -775,7 +775,7 @@
         <div class="acct-note">One Grok account for now — whatever <code>grok</code> is signed in as.</div>`;
     } else if (wizard.step === "label") {
       body = `<div class="acct-note">Optional. Leave blank to show as Account 2, Account 3, …</div>
-        <input class="field" id="wiz-label" placeholder="Label (optional)" value="${esc(wizard.label)}">
+        <input class="field" id="wiz-label" placeholder="Label (optional)" value="${esc(wizard.label)}" ${noSuggest}>
         <div class="acct-actions"><button class="opts-link" id="wiz-back" type="button">Back</button>
           <button class="refresh" id="wiz-next" type="button">Continue</button></div>`;
     } else if (wizard.provider === "codex" || wizard.provider === "antigravity") {
@@ -784,14 +784,14 @@
         : { note: "Sign in with Google. Copy the code from the Antigravity page (or paste the callback URL). This extra login does not replace <code>agy</code>'s default account.", action: "Sign in with Google", ph: "4/0A… code from the page", start: "wiz-agy", submit: "Submit code" };
       body = `<div class="acct-note">${oauth.note}</div>
         ${wizard.authUrl ? `<div class="acct-url">Open <a href="${esc(wizard.authUrl)}" target="_blank" rel="noreferrer">this sign-in URL</a></div>
-          <input class="field" id="wiz-callback" placeholder="${esc(oauth.ph)}" value="${esc(wizard.callback)}">
+          <input class="field" id="wiz-callback" placeholder="${esc(oauth.ph)}" value="${esc(wizard.callback)}" ${noSuggest}>
           <button class="refresh" id="wiz-callback-go" type="button">${oauth.submit || "Submit callback"}</button>` 
           : `<button class="refresh" id="${oauth.start}" type="button">${oauth.action}</button>`}
         <button class="opts-link" id="wiz-back" type="button">Back</button>`;
     } else {
       const ph = wizard.provider === "claude" ? "Setup token from <code>claude setup-token</code>" : "OpenCode Go API key";
       body = `<div class="acct-note">${ph}.</div>
-        <input class="field" id="wiz-secret" type="password" placeholder="${wizard.provider === "claude" ? "Setup token" : "API key"}" value="${esc(wizard.secret)}" autocomplete="off">
+        <input class="field" id="wiz-secret" type="password" placeholder="${wizard.provider === "claude" ? "Setup token" : "API key"}" value="${esc(wizard.secret)}" ${noSuggest}>
         <div class="acct-actions"><button class="opts-link" id="wiz-back" type="button">Back</button>
           <button class="refresh" id="wiz-save" type="button">Add</button></div>`;
     }
@@ -1065,7 +1065,6 @@
 
   $("opts-btn").onclick = () => setView(!settingsOpen);
   $("refresh").onclick = () => load(true, true);
-  $("opts-signed-in").onclick = () => persistEnabled(null);
   $("opts-email").onchange = () => {
     showEmail = $("opts-email").checked;
     localStorage.setItem("ju.showEmail", showEmail ? "1" : "0");

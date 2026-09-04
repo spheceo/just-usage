@@ -332,6 +332,13 @@ export async function fetchAntigravity(account: ResolvedAccount): Promise<QuotaS
     if (usage.status === 401) {
       return snapshot(account, "error", { email, plan, message: "Google session rejected (401). Sign in again." });
     }
+    if (usage.status === 403) {
+      return snapshot(account, "unsupported", {
+        email,
+        plan,
+        message: "This Google account has no Antigravity quota. A Google AI Pro / Antigravity subscription is required.",
+      });
+    }
     if (usage.status !== 200) {
       return snapshot(account, "error", { email, plan, message: `Usage endpoint returned HTTP ${usage.status}.` });
     }
