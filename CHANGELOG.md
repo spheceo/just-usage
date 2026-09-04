@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.0.4
+
+Just Usage v0.0.4
+
+What's Changed
+Publish to npm with provenance now that the repo is public in [#0c9b9bb](https://github.com/spheceo/just-usage/commit/0c9b9bbdfb5727789774d4563ecafdf756f9b644)
+
 ## v0.0.3
 
 Just Usage v0.0.3
