@@ -8,6 +8,8 @@ name: release
 #   Workflow filename: release.yml
 #   Environment: (leave empty)
 #   Allowed actions: npm publish
+#
+# No --provenance: Sigstore only accepts public GitHub repos, and this one is private.
 on:
   push:
     tags: ["v*"]
@@ -17,6 +19,34 @@ permissions:
   id-token: write
 
 jobs:
+  github-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - run: bun run build
+      - name: create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          NOTES="$(bun -e '
+            import { extractReleaseNotes } from "./scripts/changelog.ts";
+            const tag = process.env.GITHUB_REF_NAME ?? "";
+            const notes = extractReleaseNotes(await Bun.file("CHANGELOG.md").text(), tag);
+            if (!notes) {
+              console.error("CHANGELOG.md is missing a section for " + tag);
+              process.exit(1);
+            }
+            process.stdout.write(notes);
+          ')"
+          npm pack --silent
+          gh release create "${GITHUB_REF_NAME}" ./*.tgz \
+            --title "${GITHUB_REF_NAME}" \
+            --notes "$NOTES"
+
   publish:
     runs-on: ubuntu-latest
     steps:
@@ -43,23 +73,4 @@ jobs:
 
       # Trusted publishing requires npm >= 11.5.1.
       - run: npm install -g npm@^11.5.1
-      - run: npm publish --provenance --access public
-
-      - name: create GitHub release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          NOTES="$(bun -e '
-            import { extractReleaseNotes } from "./scripts/changelog.ts";
-            const tag = process.env.GITHUB_REF_NAME ?? "";
-            const notes = extractReleaseNotes(await Bun.file("CHANGELOG.md").text(), tag);
-            if (!notes) {
-              console.error("CHANGELOG.md is missing a section for " + tag);
-              process.exit(1);
-            }
-            process.stdout.write(notes);
-          ')"
-          npm pack --silent
-          gh release create "${GITHUB_REF_NAME}" ./*.tgz \
-            --title "${GITHUB_REF_NAME}" \
-            --notes "$NOTES"
+      - run: npm publish --access public
