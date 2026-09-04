@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.0.3
+
+Just Usage v0.0.3
+
+What's Changed
+Publish to npm without provenance so a private repo can release in [#0286994](https://github.com/spheceo/just-usage/commit/0286994337d3a07ecc3e6ee017f474543264086f)
+
 ## v0.0.2
 
 Just Usage v0.0.2

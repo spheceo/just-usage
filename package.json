@@ -1,6 +1,6 @@
 {
   "name": "just-usage",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "One local page for your coding-CLI subscription quotas: Claude, Codex, Cursor, OpenCode Go.",
   "type": "module",
   "license": "MIT",
