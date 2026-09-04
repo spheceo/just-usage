@@ -114,8 +114,18 @@ async function tokenFromSecretTool(): Promise<AgyToken | null> {
   return parseAgyKeyringBlob(res.stdout);
 }
 
+function tokenFromOauthFile(): AgyToken | null {
+  const file = join(homedir(), ".gemini", "antigravity-cli", "antigravity-oauth-token");
+  if (!existsSync(file)) return null;
+  try {
+    return parseAgyKeyringBlob(readFileSync(file, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
 export async function readDefaultAgyToken(): Promise<AgyToken | null> {
-  return (await tokenFromKeychain()) ?? (await tokenFromSecretTool());
+  return (await tokenFromKeychain()) ?? (await tokenFromSecretTool()) ?? tokenFromOauthFile();
 }
 
 export function createPkce(): { verifier: string; challenge: string } {

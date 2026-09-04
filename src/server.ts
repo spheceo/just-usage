@@ -18,6 +18,7 @@ import {
 import { ReportCache } from "./collect.ts";
 import { CACHE_TTL_MS, PACKAGE_NAME, VERSION } from "./config.ts";
 import { removeRunRecord, writeRunRecord } from "./instance.ts";
+import { log, logError } from "./log.ts";
 import { run } from "./proc.ts";
 import type { ProviderId, UpdateInfo } from "./types.ts";
 import faviconSvg from "./ui/favicon.svg" with { type: "text" };
@@ -96,9 +97,24 @@ export async function startServer(opts: ServerOptions): Promise<{ close: () => v
     return out;
   };
 
+  const quietPath = (path: string) => path === "/favicon.svg" || path === "/favicon.ico" || path.startsWith("/logos/");
+
   const handler = async (req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url ?? "/", "http://localhost");
+    const started = Date.now();
     res.setHeader("X-Content-Type-Options", "nosniff");
+    if (!quietPath(url.pathname)) {
+      res.on("finish", () => {
+        const status = res.statusCode;
+        log(status >= 500 ? "error" : status >= 400 ? "warn" : "info", "http", {
+          method: req.method ?? "GET",
+          path: url.pathname,
+          refresh: url.searchParams.get("refresh") === "1" || undefined,
+          status,
+          ms: Date.now() - started,
+        });
+      });
+    }
     try {
       const method = req.method ?? "GET";
       if ((url.pathname === "/favicon.svg" || url.pathname === "/favicon.ico") && (method === "GET" || method === "HEAD")) {
@@ -207,6 +223,7 @@ export async function startServer(opts: ServerOptions): Promise<{ close: () => v
       json(res, 404, { error: "not found" });
     } catch (e) {
       if (e instanceof AccountError) {
+        log("warn", "http.error", { path: url.pathname, status: e.status, message: e.message });
         json(res, e.status, { error: e.message });
         return;
       }
@@ -214,6 +231,7 @@ export async function startServer(opts: ServerOptions): Promise<{ close: () => v
         json(res, 400, { error: "Invalid JSON." });
         return;
       }
+      logError("http.error", e, { path: url.pathname, status: 500 });
       json(res, 500, { error: e instanceof Error ? e.message : String(e) });
     }
   };
@@ -223,12 +241,15 @@ export async function startServer(opts: ServerOptions): Promise<{ close: () => v
     server.once("error", reject);
     server.listen(opts.port, opts.host, () => {
       writeRunRecord({ port: opts.port, host: opts.host });
+      const urls = reachableUrls(opts.host, opts.port, tailscaleIp);
+      log("info", "serve.start", { host: opts.host, port: opts.port, urls: urls.map((u) => u.url) });
       resolve({
         close: () => {
+          log("info", "serve.stop", { port: opts.port });
           removeRunRecord(opts.port);
           server.close();
         },
-        urls: reachableUrls(opts.host, opts.port, tailscaleIp),
+        urls,
       });
     });
   });

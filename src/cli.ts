@@ -6,6 +6,7 @@ import { claudeAuthStatus } from "./adapters/claude.ts";
 import { addClaudeToken, addOpenCodeKey, beginAntigravityAdd, removeExtraAccount, saveCodexProfile, submitAntigravityCallback } from "./accounts.ts";
 import { collectReport } from "./collect.ts";
 import { DEFAULT_HOST, DEFAULT_PORT, PACKAGE_NAME, VERSION, ensureDir } from "./config.ts";
+import { log, logError } from "./log.ts";
 import { openInBrowser, runInteractive, which } from "./proc.ts";
 import { getAccount, listAccounts, newAccountId, profileDirFor, saveAccount, updateAccount } from "./registry.ts";
 import { formatStopResults, stopServers } from "./instance.ts";
@@ -41,6 +42,8 @@ Providers: ${PROVIDERS.map((p) => p.name).join(", ")}
 Cursor uses whatever \`cursor-agent\` is logged in as (single account).
 Grok uses whatever \`grok login --oauth\` stored (single account).
 Antigravity extras are extra Google logins; they do not replace \`agy\`'s signed-in account.
+
+Logs are appended to ~/.just-usage/logs (one JSON line per action).
 
 Stop
   \`just-usage stop\` asks the server to exit — the same as Ctrl+C in the terminal
@@ -90,6 +93,7 @@ See also
 `;
 
 function fail(msg: string, code = 1): never {
+  log("error", "cli.fail", { message: msg, code });
   console.error(msg);
   process.exit(code);
 }
@@ -156,6 +160,7 @@ async function cmdServe(argv: string[]) {
       const stop = port === DEFAULT_PORT ? "just-usage stop" : `just-usage stop --port ${port}`;
       fail(`Port ${port} is already in use. Stop it with: ${stop}\nOr start another: just-usage serve --port ${port + 1}`);
     }
+    logError("serve.error", e, { host, port });
     throw e;
   }
   console.log(`${PACKAGE_NAME} v${VERSION}`);
@@ -177,6 +182,7 @@ async function cmdServe(argv: string[]) {
 
 async function cmdStatus(argv: string[]) {
   const { values } = parseArgs({ args: argv, options: { json: { type: "boolean" } }, allowPositionals: true, strict: false });
+  log("info", "cli.status", { json: values.json === true });
   const [report, update] = await Promise.all([collectReport(null), checkForUpdate().catch(() => null)]);
   report.update = update;
   if (values.json) {
@@ -188,6 +194,7 @@ async function cmdStatus(argv: string[]) {
 
 function cmdAccounts() {
   const rows = listAccounts();
+  log("info", "cli.accounts", { extra: rows.length });
   console.log("Default accounts come from each CLI's own login (codex login, claude /login, cursor-agent login, grok login --oauth, opencode auth login, agy).");
   if (rows.length === 0) {
     console.log("\nNo extra accounts. Add one with: just-usage add codex | claude | opencode | antigravity");
@@ -235,9 +242,11 @@ async function addClaudeProfile(label: string | undefined) {
   if (!status?.loggedIn) {
     const { rmSync } = await import("node:fs");
     rmSync(dir, { recursive: true, force: true });
+    log("error", "account.login.error", { provider: "claude", message: "login did not complete" });
     fail("Login did not complete; nothing was saved.");
   }
   saveAccount({ id, provider: "claude", label: label ?? id.split(":")[1]!, kind: "profile", path: dir, email: null, createdAt: new Date().toISOString() });
+  log("info", "account.add", { account: id, provider: "claude", kind: "profile" });
   console.log(`\nAdded ${id}. Note: on macOS the first read may trigger a Keychain prompt — choose "Always Allow".`);
 }
 
@@ -297,16 +306,22 @@ async function cmdLogin(argv: string[]) {
   const rec = getAccount(id);
   if (!rec) fail(`Unknown account: ${id}`);
   if (rec.kind !== "profile" || !rec.path) fail(`${id} is a ${rec.kind} account; remove and re-add it instead.`);
+  log("info", "account.login.start", { account: id, provider: rec.provider, kind: "relogin" });
   if (rec.provider === "codex") {
     const info = await codexLogin(rec.path, (url) => {
       console.log(`\nOpen this URL to sign in (opening your browser):\n${url}\n`);
       openInBrowser(url);
     });
     updateAccount(id, { email: info.email });
+    log("info", "account.login.done", { account: id, provider: "codex" });
     console.log(`Re-authenticated ${id}${info.email ? ` (${info.email})` : ""}.`);
   } else if (rec.provider === "claude") {
     await runInteractive("claude", ["auth", "login"], { CLAUDE_CONFIG_DIR: rec.path });
     const status = await claudeAuthStatus(rec.path);
+    log(status?.loggedIn ? "info" : "error", status?.loggedIn ? "account.login.done" : "account.login.error", {
+      account: id,
+      provider: "claude",
+    });
     console.log(status?.loggedIn ? `Re-authenticated ${id}.` : "Login did not complete.");
   } else {
     fail(`${providerName(rec.provider)} accounts cannot be re-authenticated this way.`);
@@ -371,6 +386,7 @@ async function cmdUpgrade(argv: string[]) {
 async function main() {
   const argv = process.argv.slice(2);
   const cmd = argv[0];
+  log("info", "cli", { command: cmd ?? "serve" });
   if (cmd === "--version" || cmd === "-v" || cmd === "version") {
     console.log(VERSION);
     return;
@@ -408,6 +424,7 @@ async function main() {
 }
 
 main().catch((e) => {
+  logError("cli.crash", e);
   console.error(e instanceof Error ? e.message : String(e));
   process.exit(1);
 });

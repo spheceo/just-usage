@@ -1,6 +1,7 @@
 import { existsSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { PACKAGE_NAME, DEFAULT_PORT, ensureDir, paths } from "./config.ts";
 import { fetchJson, isObject } from "./adapters/common.ts";
+import { log } from "./log.ts";
 import { run } from "./proc.ts";
 
 export interface RunRecord {
@@ -202,12 +203,17 @@ export type StopResult =
 export async function stopPort(port: number): Promise<StopResult> {
   const found = await oursOnPort(port);
   if (found.pids.length === 0) {
-    if (found.listening && !isJustUsageHealth(found.health)) return { status: "busy", port };
+    if (found.listening && !isJustUsageHealth(found.health)) {
+      log("warn", "stop.busy", { port });
+      return { status: "busy", port };
+    }
     removeRunRecord(port);
+    log("info", "stop.idle", { port });
     return { status: "idle", port };
   }
   await terminate(found.pids);
   removeRunRecord(port);
+  log("info", "stop.ok", { port, pids: found.pids });
   return { status: "stopped", port, pids: found.pids };
 }
 

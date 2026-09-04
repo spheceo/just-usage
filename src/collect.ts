@@ -1,9 +1,12 @@
-import { hostname } from "node:os";
+import { existsSync } from "node:fs";
+import { homedir, hostname } from "node:os";
+import { join } from "node:path";
 import { formatHostname } from "./format.ts";
 import { fetchSnapshot } from "./adapters/index.ts";
 import { snapshot } from "./adapters/common.ts";
 import { FETCH_TIMEOUT_MS, VERSION } from "./config.ts";
-import { binVersion, which, withTimeout } from "./proc.ts";
+import { log } from "./log.ts";
+import { binVersion, clearBinCache, which, withTimeout } from "./proc.ts";
 import { listAccounts } from "./registry.ts";
 import { PROVIDERS, type ProviderId, type ProviderReport, type QuotaSnapshot, type ResolvedAccount, type UpdateInfo, type UsageReport } from "./types.ts";
 
@@ -13,11 +16,56 @@ export interface ProviderPresence {
   version: string | null;
 }
 
+/** Marker files that mean the CLI has been installed or signed in, even if PATH is stale. */
+export function providerHomeMarkers(id: ProviderId): string[] {
+  const home = homedir();
+  switch (id) {
+    case "antigravity":
+      return [
+        join(home, ".gemini", "antigravity-cli", "antigravity-oauth-token"),
+        join(home, ".gemini", "antigravity-cli", "settings.json"),
+        join(home, ".gemini", "antigravity-cli", "installation_id"),
+      ];
+    case "claude":
+      return [join(home, ".claude", ".credentials.json"), join(home, ".claude", "settings.json")];
+    case "codex":
+      return [join(home, ".codex", "auth.json"), join(home, ".codex", "config.toml")];
+    case "cursor":
+      return [join(home, ".cursor", "auth.json")];
+    case "grok":
+      return [join(home, ".grok", "auth.json")];
+    case "opencode": {
+      const xdg = process.env.XDG_DATA_HOME;
+      const base = xdg && xdg.trim() ? xdg : join(home, ".local", "share");
+      return [join(base, "opencode", "auth.json")];
+    }
+  }
+}
+
+export function providerHomeExists(id: ProviderId): boolean {
+  return providerHomeMarkers(id).some((file) => existsSync(file));
+}
+
+export function isProviderPresent(opts: { binPath: string | null; homeExists: boolean; provider: ProviderId }): boolean {
+  if (opts.binPath) return true;
+  if (opts.provider === "opencode") return true;
+  return opts.homeExists;
+}
+
 export async function detectProviders(): Promise<ProviderPresence[]> {
+  clearBinCache();
   return Promise.all(
     PROVIDERS.map(async (p) => {
-      const path = await which(p.bin);
-      return { id: p.id, installed: path !== null, version: null };
+      const path = await which(p.bin, { fresh: true });
+      const homeExists = providerHomeExists(p.id);
+      const installed = isProviderPresent({ binPath: path, homeExists, provider: p.id });
+      log("info", "detect", {
+        provider: p.id,
+        installed,
+        path: path ?? undefined,
+        home: homeExists || undefined,
+      });
+      return { id: p.id, installed, version: null };
     }),
   );
 }
@@ -37,9 +85,24 @@ export function resolveAccounts(provider: ProviderId, installed: boolean): Resol
 
 export async function fetchAccount(account: ResolvedAccount): Promise<QuotaSnapshot> {
   try {
-    return await withTimeout(fetchSnapshot(account), FETCH_TIMEOUT_MS, `${account.provider} fetch`);
+    const snap = await withTimeout(fetchSnapshot(account), FETCH_TIMEOUT_MS, `${account.provider} fetch`);
+    log(snap.status === "error" ? "error" : "info", "quotas.fetch", {
+      account: snap.account.id,
+      provider: snap.account.provider,
+      status: snap.status,
+      windows: snap.windows.length,
+      message: snap.message ?? undefined,
+    });
+    return snap;
   } catch (e) {
-    return snapshot(account, "error", { message: e instanceof Error ? e.message : String(e) });
+    const snap = snapshot(account, "error", { message: e instanceof Error ? e.message : String(e) });
+    log("error", "quotas.fetch", {
+      account: account.id,
+      provider: account.provider,
+      status: snap.status,
+      message: snap.message ?? undefined,
+    });
+    return snap;
   }
 }
 
@@ -51,11 +114,20 @@ export async function collectReport(update: UpdateInfo | null, only?: ProviderId
       const accounts = resolveAccounts(p.id, pres.installed);
       const [snapshots, version] = await Promise.all([
         Promise.all(accounts.map(fetchAccount)),
-        pres.installed ? binVersion(p.bin) : Promise.resolve(null),
+        pres.installed ? binVersion((await which(p.bin)) ?? p.bin) : Promise.resolve(null),
       ]);
       return { id: p.id, name: p.name, installed: pres.installed, version, accounts: snapshots };
     }),
   );
+  const accounts = providers.flatMap((p) => p.accounts);
+  log("info", "quotas.collect", {
+    providers: providers.length,
+    accounts: accounts.length,
+    ok: accounts.filter((a) => a.status === "ok").length,
+    error: accounts.filter((a) => a.status === "error").length,
+    signed_out: accounts.filter((a) => a.status === "signed_out").length,
+    unsupported: accounts.filter((a) => a.status === "unsupported").length,
+  });
   return {
     version: VERSION,
     hostname: formatHostname(hostname()),

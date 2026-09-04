@@ -307,8 +307,8 @@
     if (cached && Array.isArray(cached.providers)) report = cached;
   } catch {}
   const params = new URLSearchParams(location.search);
-  const wanted = params.get("tab");
-  let active = PROVIDERS.some(([id]) => id === wanted) ? wanted : localStorage.getItem("ju.tab") || "claude";
+  let active = localStorage.getItem("ju.tab") || "claude";
+  if (!PROVIDERS.some(([id]) => id === active)) active = "claude";
   let settingsOpen = params.get("view") === "settings";
   let loading = false;
   let busy = false;
@@ -457,16 +457,17 @@
     else render();
   }
 
+  function syncUrl() {
+    const want = settingsOpen ? `${location.pathname}?view=settings` : location.pathname;
+    if (location.pathname + location.search !== want) history.replaceState(null, "", want);
+  }
+
   function setView(open) {
     settingsOpen = open;
     $("dash").hidden = open;
     $("settings").hidden = !open;
-    const btn = $("opts-btn");
     $("opts-label").textContent = open ? "Back" : "Options";
-    const q = new URLSearchParams();
-    if (open) q.set("view", "settings");
-    else q.set("tab", active);
-    history.replaceState(null, "", q.toString() ? `?${q}` : location.pathname);
+    syncUrl();
     if (open) {
       renderSettings();
       renderChrome();
@@ -1127,6 +1128,7 @@
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") maybeAutoRefresh();
   });
+  syncUrl();
   if (report) render();
   load(false);
 })();

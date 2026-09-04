@@ -11,6 +11,7 @@ import { verifyClaudeToken } from "./adapters/claude.ts";
 import { startCodexLogin, type CodexLoginHandle } from "./adapters/codex.ts";
 import { fetchOpenCodeUsage } from "./adapters/opencode.ts";
 import { ensureDir } from "./config.ts";
+import { log, logError } from "./log.ts";
 import { which } from "./proc.ts";
 import { deleteAccount, getAccount, newAccountId, profileDirFor, saveAccount, updateAccount } from "./registry.ts";
 import { secretStore } from "./secrets.ts";
@@ -48,6 +49,7 @@ export async function addClaudeToken(token: string, label?: string): Promise<Add
     createdAt: new Date().toISOString(),
   };
   saveAccount(account);
+  log("info", "account.add", { account: account.id, provider: account.provider, kind: account.kind });
   return { account };
 }
 
@@ -68,6 +70,12 @@ export async function addOpenCodeKey(key: string, label?: string): Promise<AddRe
     createdAt: new Date().toISOString(),
   };
   saveAccount(account);
+  log("info", "account.add", {
+    account: account.id,
+    provider: account.provider,
+    kind: account.kind,
+    warning: status === 403 ? "no-subscription" : undefined,
+  });
   return {
     account,
     warning: status === 403 ? "Key is valid but has no active OpenCode Go subscription." : undefined,
@@ -78,7 +86,9 @@ export function renameExtraAccount(id: string, label: string): AccountRecord {
   if (id.endsWith(":default")) throw new AccountError("Default accounts are renamed on the page only.");
   if (!getAccount(id)) throw new AccountError(`Unknown account: ${id}`, 404);
   updateAccount(id, { label: label.trim() });
-  return getAccount(id)!;
+  const account = getAccount(id)!;
+  log("info", "account.rename", { account: account.id, provider: account.provider });
+  return account;
 }
 
 export async function removeExtraAccount(id: string): Promise<AccountRecord> {
@@ -86,6 +96,7 @@ export async function removeExtraAccount(id: string): Promise<AccountRecord> {
   const rec = deleteAccount(id);
   if (!rec) throw new AccountError(`Unknown account: ${id}`, 404);
   if (rec.kind === "token") await secretStore().delete(id);
+  log("info", "account.remove", { account: rec.id, provider: rec.provider, kind: rec.kind });
   return rec;
 }
 
@@ -113,6 +124,7 @@ export function saveCodexProfile(opts: {
     createdAt: new Date().toISOString(),
   };
   saveAccount(account);
+  log("info", "account.add", { account: account.id, provider: account.provider, kind: account.kind });
   return account;
 }
 
@@ -169,7 +181,7 @@ function dropCodexSession(id: string, removeDir: boolean) {
 }
 
 export async function beginCodexAdd(label?: string): Promise<{ sessionId: string; authUrl: string }> {
-  if (!(await which("codex"))) throw new AccountError("codex is not installed (npm i -g @openai/codex).");
+  if (!(await which("codex", { fresh: true }))) throw new AccountError("codex is not installed (npm i -g @openai/codex).");
   const tmpId = newAccountId("codex", label?.trim() || "pending");
   const dir = ensureDir(profileDirFor("codex", tmpId));
   const handle = await startCodexLogin(dir);
@@ -188,12 +200,15 @@ export async function beginCodexAdd(label?: string): Promise<{ sessionId: string
     .then((info) => {
       rec.account = saveCodexProfile({ label: rec.label, tmpId, dir, email: info.email });
       rec.status = "done";
+      log("info", "account.login.done", { account: rec.account.id, provider: "codex" });
     })
     .catch((e) => {
       rec.status = "error";
       rec.error = e instanceof Error ? e.message : String(e);
+      logError("account.login.error", e, { provider: "codex" });
     });
   codexSessions.set(id, rec);
+  log("info", "account.login.start", { provider: "codex", kind: "add" });
   return { sessionId: id, authUrl: handle.authUrl };
 }
 
@@ -219,12 +234,15 @@ export async function beginCodexRelogin(accountId: string): Promise<{ sessionId:
       updateAccount(existing.id, { email: info.email });
       rec.account = { ...existing, email: info.email };
       rec.status = "done";
+      log("info", "account.login.done", { account: existing.id, provider: "codex" });
     })
     .catch((e) => {
       rec.status = "error";
       rec.error = e instanceof Error ? e.message : String(e);
+      logError("account.login.error", e, { account: existing.id, provider: "codex" });
     });
   codexSessions.set(id, rec);
+  log("info", "account.login.start", { account: existing.id, provider: "codex", kind: "relogin" });
   return { sessionId: id, authUrl: handle.authUrl };
 }
 
@@ -290,8 +308,10 @@ function startAgySession(opts: { label?: string; accountId?: string }): { sessio
 }
 
 export async function beginAntigravityAdd(label?: string): Promise<{ sessionId: string; authUrl: string }> {
-  if (!(await which("agy"))) throw new AccountError("agy is not installed (https://antigravity.google/docs/cli/install).");
-  return startAgySession({ label });
+  if (!(await which("agy", { fresh: true }))) throw new AccountError("agy is not installed (https://antigravity.google/docs/cli/install).");
+  const started = startAgySession({ label });
+  log("info", "account.login.start", { provider: "antigravity", kind: "add" });
+  return started;
 }
 
 export async function beginAntigravityRelogin(accountId: string): Promise<{ sessionId: string; authUrl: string }> {
@@ -300,7 +320,9 @@ export async function beginAntigravityRelogin(accountId: string): Promise<{ sess
   if (existing.provider !== "antigravity" || existing.kind !== "token") {
     throw new AccountError(`${accountId} cannot be re-authenticated this way.`);
   }
-  return startAgySession({ accountId });
+  const started = startAgySession({ accountId });
+  log("info", "account.login.start", { account: accountId, provider: "antigravity", kind: "relogin" });
+  return started;
 }
 
 export function antigravitySessionStatus(sessionId: string): {
@@ -346,10 +368,16 @@ export async function submitAntigravityCallback(sessionId: string, raw: string):
       saveAccount(rec.account);
     }
     rec.status = "done";
+    log("info", rec.accountId ? "account.login.done" : "account.add", {
+      account: rec.account.id,
+      provider: "antigravity",
+      kind: rec.account.kind,
+    });
     return rec.account;
   } catch (e) {
     rec.status = "error";
     rec.error = e instanceof Error ? e.message : String(e);
+    logError("account.login.error", e, { provider: "antigravity", account: rec.accountId });
     throw new AccountError(rec.error);
   }
 }

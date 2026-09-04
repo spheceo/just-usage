@@ -17,6 +17,7 @@ import {
 
 const home = mkdtempSync(join(tmpdir(), "just-usage-"));
 process.env.JUST_USAGE_HOME = home;
+process.env.JUST_USAGE_LOG_DIR = join(home, "logs");
 
 describe("instance helpers", () => {
   test("recognizes just-usage command lines", () => {
@@ -79,7 +80,7 @@ describe("just-usage stop", () => {
   test("stops a spawned server on a dedicated port", async () => {
     const child = spawn("bun", ["run", "src/cli.ts", "serve", "--port", String(port), "--host", "127.0.0.1", "--no-open"], {
       cwd: join(import.meta.dir, ".."),
-      env: { ...process.env, JUST_USAGE_HOME: home },
+      env: { ...process.env, JUST_USAGE_HOME: home, JUST_USAGE_LOG_DIR: join(home, "logs") },
       stdio: "ignore",
     });
     const deadline = Date.now() + 12_000;

@@ -2,6 +2,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { GITHUB_REPO, PACKAGE_NAME, VERSION, ensureDir, paths } from "./config.ts";
 import { semverGt } from "./format.ts";
+import { log } from "./log.ts";
 import { runInteractive } from "./proc.ts";
 import type { UpdateInfo } from "./types.ts";
 
@@ -74,10 +75,15 @@ export async function checkForUpdate(force = false): Promise<UpdateInfo | null> 
       latest = null;
     }
   }
-  if (!latest) return cached ? toInfo(cached) : null;
+  if (!latest) {
+    log("warn", "update.check", { ok: false });
+    return cached ? toInfo(cached) : null;
+  }
   const entry = { checkedAt: new Date().toISOString(), latest };
   writeCache(entry);
-  return toInfo(entry);
+  const info = toInfo(entry);
+  log("info", "update.check", { latest: info.latest, available: info.available });
+  return info;
 }
 
 function toInfo(c: CacheFile): UpdateInfo {
@@ -112,5 +118,8 @@ export function upgradeCommand(pm: PackageManager, version = "latest"): [string,
 export async function runUpgrade(pm: PackageManager, version = "latest"): Promise<number | null> {
   const [cmd, args] = upgradeCommand(pm, version);
   console.log(`$ ${cmd} ${args.join(" ")}`);
-  return runInteractive(cmd, args);
+  log("info", "update.upgrade", { pm, version });
+  const code = await runInteractive(cmd, args);
+  log(code === 0 ? "info" : "error", "update.upgrade.done", { pm, version, code: code ?? undefined });
+  return code;
 }

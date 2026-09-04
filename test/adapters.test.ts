@@ -157,6 +157,15 @@ describe("antigravity", () => {
     expect(parsed?.refreshToken).toBe("1//xyz");
     expect(parsed?.expiry).toBe(Date.parse("2026-09-04T21:40:07.158017+02:00"));
   });
+
+  test("reads the oauth token file agy writes on disk", () => {
+    const parsed = parseAgyKeyringBlob(JSON.stringify({
+      token: { access_token: "ya29.file", refresh_token: "1//file", expiry: "2026-09-04T21:40:07.158017+02:00", token_type: "Bearer" },
+      auth_method: "consumer",
+    }));
+    expect(parsed?.accessToken).toBe("ya29.file");
+    expect(parsed?.refreshToken).toBe("1//file");
+  });
 });
 
 describe("grok", () => {

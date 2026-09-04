@@ -1,4 +1,7 @@
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
+import { homedir } from "node:os";
+import { delimiter, join } from "node:path";
 
 export interface RunResult {
   code: number | null;
@@ -25,7 +28,7 @@ export function run(cmd: string, args: string[], opts: RunOptions = {}): Promise
       resolve({ code, stdout, stderr });
     };
     const child = spawn(cmd, args, {
-      env: { ...process.env, ...opts.env },
+      env: spawnEnv(opts.env),
       stdio: ["pipe", "pipe", "pipe"],
     });
     const timer = setTimeout(() => {
@@ -48,7 +51,7 @@ export function run(cmd: string, args: string[], opts: RunOptions = {}): Promise
 /** Run interactively, inheriting the terminal. Resolves with the exit code. */
 export function runInteractive(cmd: string, args: string[], env?: NodeJS.ProcessEnv): Promise<number | null> {
   return new Promise((resolve, reject) => {
-    const child = spawn(cmd, args, { env: { ...process.env, ...env }, stdio: "inherit" });
+    const child = spawn(cmd, args, { env: spawnEnv(env), stdio: "inherit" });
     child.on("error", reject);
     child.on("close", (code) => resolve(code));
   });
@@ -56,17 +59,65 @@ export function runInteractive(cmd: string, args: string[], env?: NodeJS.Process
 
 const whichCache = new Map<string, Promise<string | null>>();
 
-/** Resolve a binary on PATH. Cached for the process lifetime. */
-export function which(bin: string): Promise<string | null> {
+/** Dirs CLIs actually land in, even when the long-lived server was started with a thin PATH. */
+export function extraBinDirs(): string[] {
+  const home = homedir();
+  const dirs = [
+    join(home, ".local", "bin"),
+    join(home, "bin"),
+    "/opt/homebrew/bin",
+    "/usr/local/bin",
+    "/home/linuxbrew/.linuxbrew/bin",
+    join(home, ".npm-global", "bin"),
+  ];
+  if (process.platform === "win32") {
+    const local = process.env.LOCALAPPDATA;
+    if (local) dirs.push(join(local, "agy", "bin"));
+  }
+  return dirs.filter((d) => existsSync(d));
+}
+
+export function spawnEnv(extra?: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const pathKey = process.platform === "win32" && process.env.Path && !process.env.PATH ? "Path" : "PATH";
+  const current = extra?.[pathKey] ?? extra?.PATH ?? process.env[pathKey] ?? process.env.PATH ?? "";
+  const seen = new Set<string>();
+  const parts: string[] = [];
+  for (const dir of [...extraBinDirs(), ...current.split(delimiter)]) {
+    if (!dir || seen.has(dir)) continue;
+    seen.add(dir);
+    parts.push(dir);
+  }
+  return { ...process.env, ...extra, [pathKey]: parts.join(delimiter) };
+}
+
+async function resolveBin(bin: string): Promise<string | null> {
+  const finder = process.platform === "win32" ? "where" : "which";
+  const res = await run(finder, [bin], { timeoutMs: 5000 });
+  if (res.code === 0) {
+    const first = res.stdout.split(/\r?\n/).map((s) => s.trim()).find(Boolean);
+    if (first && existsSync(first)) return first;
+  }
+  const names = process.platform === "win32" ? [bin, `${bin}.exe`, `${bin}.cmd`] : [bin];
+  for (const dir of extraBinDirs()) {
+    for (const name of names) {
+      const candidate = join(dir, name);
+      if (existsSync(candidate)) return candidate;
+    }
+  }
+  return null;
+}
+
+export function clearBinCache(): void {
+  whichCache.clear();
+  versionCache.clear();
+}
+
+/** Resolve a binary on PATH plus known install dirs. Pass `{ fresh: true }` after an install. */
+export function which(bin: string, opts: { fresh?: boolean } = {}): Promise<string | null> {
+  if (opts.fresh) whichCache.delete(bin);
   let p = whichCache.get(bin);
   if (!p) {
-    p = (async () => {
-      const finder = process.platform === "win32" ? "where" : "which";
-      const res = await run(finder, [bin], { timeoutMs: 5000 });
-      if (res.code !== 0) return null;
-      const first = res.stdout.split(/\r?\n/).map((s) => s.trim()).find(Boolean);
-      return first ?? null;
-    })();
+    p = resolveBin(bin);
     whichCache.set(bin, p);
   }
   return p;
