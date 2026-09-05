@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.0.7
+
+## What's Changed
+Stop the five-minute interval test from starting a live quota collect. in [#fb4fc1b](https://github.com/spheceo/just-usage/commit/fb4fc1b7af79c7cff343cdd2319b6d445042c773)
+Refresh quotas on the server every five minutes even when no browser is open. in [#624aa55](https://github.com/spheceo/just-usage/commit/624aa5529596e9e7f4e1b546c7dd318b779b48ba)
+
 ## v0.0.6
 
 ## What's Changed
