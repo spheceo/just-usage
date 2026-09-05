@@ -1117,7 +1117,7 @@
   function maybeAutoRefresh() {
     if (!report || loading || settingsOpen) return;
     const t = Date.parse(report.fetchedAt);
-    if (Number.isFinite(t) && Date.now() - t >= STALE_MS) load(true);
+    if (Number.isFinite(t) && Date.now() - t >= STALE_MS) load(false);
   }
   setInterval(() => {
     maybeAutoRefresh();

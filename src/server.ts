@@ -16,7 +16,7 @@ import {
   submitCodexCallback,
 } from "./accounts.ts";
 import { ReportCache } from "./collect.ts";
-import { CACHE_TTL_MS, PACKAGE_NAME, VERSION } from "./config.ts";
+import { CACHE_TTL_MS, PACKAGE_NAME, REFRESH_INTERVAL_MS, VERSION } from "./config.ts";
 import { removeRunRecord, writeRunRecord } from "./instance.ts";
 import { log, logError } from "./log.ts";
 import { run } from "./proc.ts";
@@ -87,8 +87,7 @@ function str(v: unknown): string {
 
 export async function startServer(opts: ServerOptions): Promise<{ close: () => void; urls: ListedUrl[] }> {
   const cache = new ReportCache(CACHE_TTL_MS, opts.getUpdate);
-  // Warm the cache so the first page load is fast.
-  void cache.get(true).catch(() => {});
+  cache.start(REFRESH_INTERVAL_MS);
   const tailscaleIp = await detectTailscaleIp();
 
   const mutated = async <T>(work: () => Promise<T>): Promise<T> => {
@@ -245,6 +244,7 @@ export async function startServer(opts: ServerOptions): Promise<{ close: () => v
       log("info", "serve.start", { host: opts.host, port: opts.port, urls: urls.map((u) => u.url) });
       resolve({
         close: () => {
+          cache.stop();
           log("info", "serve.stop", { port: opts.port });
           removeRunRecord(opts.port);
           server.close();

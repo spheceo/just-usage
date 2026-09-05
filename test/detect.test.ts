@@ -2,7 +2,8 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
-import { isProviderPresent, providerHomeMarkers } from "../src/collect.ts";
+import { ReportCache, isProviderPresent, providerHomeMarkers } from "../src/collect.ts";
+import { REFRESH_INTERVAL_MS } from "../src/config.ts";
 import { extraBinDirs, spawnEnv, which } from "../src/proc.ts";
 
 const logDir = mkdtempSync(join(tmpdir(), "just-usage-detect-"));
@@ -35,5 +36,14 @@ describe("CLI discovery", () => {
 
   test("antigravity home markers include the oauth token file", () => {
     expect(providerHomeMarkers("antigravity").some((p) => p.endsWith("antigravity-oauth-token"))).toBe(true);
+  });
+
+  test("server refresh interval is five minutes", () => {
+    expect(REFRESH_INTERVAL_MS).toBe(5 * 60 * 1000);
+    const cache = new ReportCache(REFRESH_INTERVAL_MS, () => null);
+    cache.start(60 * 60 * 1000);
+    cache.start(60 * 60 * 1000);
+    cache.stop();
+    cache.stop();
   });
 });

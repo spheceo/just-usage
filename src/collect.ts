@@ -141,10 +141,30 @@ export async function collectReport(update: UpdateInfo | null, only?: ProviderId
 export class ReportCache {
   private report: UsageReport | null = null;
   private inflight: Promise<UsageReport> | null = null;
+  private timer: ReturnType<typeof setInterval> | null = null;
   constructor(
     private readonly ttlMs: number,
     private readonly getUpdate: () => UpdateInfo | null,
   ) {}
+
+  /** Fetch now, then again on an interval for the life of the process. */
+  start(intervalMs: number) {
+    if (this.timer) return;
+    log("info", "quotas.refresh.start", { intervalMs });
+    void this.get(true).catch(() => {});
+    this.timer = setInterval(() => {
+      log("info", "quotas.refresh", { scheduled: true });
+      void this.get(true).catch(() => {});
+    }, intervalMs);
+    this.timer.unref?.();
+  }
+
+  stop() {
+    if (!this.timer) return;
+    clearInterval(this.timer);
+    this.timer = null;
+    log("info", "quotas.refresh.stop");
+  }
 
   get(force = false): Promise<UsageReport> {
     const cached = this.report ? { ...this.report, update: this.getUpdate() } : null;

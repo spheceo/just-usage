@@ -8,8 +8,10 @@ export const PACKAGE_NAME = "just-usage";
 export const GITHUB_REPO = "spheceo/just-usage";
 export const DEFAULT_PORT = 5757;
 export const DEFAULT_HOST = "0.0.0.0";
+/** How often the running server re-fetches quotas, even with no browser open. */
+export const REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 /** Snapshots newer than this are served from cache unless the user hits Refresh. */
-export const CACHE_TTL_MS = 120_000;
+export const CACHE_TTL_MS = REFRESH_INTERVAL_MS;
 /** Per-account fetch budget. */
 export const FETCH_TIMEOUT_MS = 20_000;
 
