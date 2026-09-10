@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.0.8
+
+## What's Changed
+Add Devin quotas, make browser open opt-in with --open, and pick a free port when the default is busy in [#97ca64a](https://github.com/spheceo/just-usage/commit/97ca64a83728bd7d15b2fbfc39ca0ffe818a8338)
+
 ## v0.0.7
 
 ## What's Changed
