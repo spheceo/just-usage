@@ -19,11 +19,11 @@ const HELP = `${PACKAGE_NAME} v${VERSION}
 One local page for your coding-CLI subscription quotas.
 
 Usage
-  just-usage                     Start the server and open the page
+  just-usage                     Start the server and print the URLs
   just-usage serve [options]     Start the server
-      --port <n>                 Port (default ${DEFAULT_PORT})
+      --port <n>                 Port (default ${DEFAULT_PORT}; if unset, a busy port moves to the next free one)
       --host <addr>              Bind address (default ${DEFAULT_HOST}; use 127.0.0.1 for local only)
-      --no-open                  Don't open a browser
+      --open                     Open a browser tab once the server is up
   just-usage stop [options]      Stop a running just-usage server
       --port <n>                 Port (default ${DEFAULT_PORT})
       --all                      Stop every just-usage server this CLI started
@@ -41,6 +41,7 @@ Usage
 Providers: ${PROVIDERS.map((p) => p.name).join(", ")}
 Cursor uses whatever \`cursor-agent\` is logged in as (single account).
 Grok uses whatever \`grok login --oauth\` stored (single account).
+Devin uses whatever \`devin auth login\` stored (single account).
 Antigravity extras are extra Google logins; they do not replace \`agy\`'s signed-in account.
 
 Logs are appended to ~/.just-usage/logs (one JSON line per action).
@@ -134,16 +135,16 @@ async function cmdServe(argv: string[]) {
     options: {
       port: { type: "string", short: "p" },
       host: { type: "string" },
-      "no-open": { type: "boolean" },
       open: { type: "boolean" },
     },
     allowPositionals: true,
     strict: false,
   });
-  const port = values.port ? Number(values.port) : DEFAULT_PORT;
-  if (!Number.isInteger(port) || port <= 0 || port > 65535) fail(`invalid port: ${values.port}`);
+  const explicitPort = Boolean(values.port);
+  const requested = explicitPort ? Number(values.port) : DEFAULT_PORT;
+  if (!Number.isInteger(requested) || requested <= 0 || requested > 65535) fail(`invalid port: ${values.port}`);
   const host = typeof values.host === "string" && values.host ? values.host : DEFAULT_HOST;
-  const shouldOpen = values["no-open"] !== true && values.open !== false;
+  const shouldOpen = values.open === true;
 
   let update: UpdateInfo | null = null;
   void checkForUpdate().then((u) => {
@@ -151,18 +152,35 @@ async function cmdServe(argv: string[]) {
     if (u?.available) console.log(`\nUpdate available: v${u.current} → v${u.latest}. Run: just-usage upgrade\n`);
   });
 
+  // A busy default port means another just-usage (or a dev run) is already up — take the next
+  // free one. An explicit --port pins exactly that port and fails when it's busy.
+  const maxPort = explicitPort ? requested : Math.min(requested + 19, 65535);
+  let port = requested;
   let server: Awaited<ReturnType<typeof startServer>>;
-  try {
-    server = await startServer({ host, port, getUpdate: () => update });
-  } catch (e) {
-    const code = (e as NodeJS.ErrnoException).code;
-    if (code === "EADDRINUSE") {
-      const stop = port === DEFAULT_PORT ? "just-usage stop" : `just-usage stop --port ${port}`;
-      fail(`Port ${port} is already in use. Stop it with: ${stop}\nOr start another: just-usage serve --port ${port + 1}`);
+  for (;;) {
+    try {
+      server = await startServer({ host, port, getUpdate: () => update });
+      break;
+    } catch (e) {
+      const code = (e as NodeJS.ErrnoException).code;
+      if (code === "EADDRINUSE" && port < maxPort) {
+        port++;
+        continue;
+      }
+      if (code === "EADDRINUSE") {
+        const stop = requested === DEFAULT_PORT ? "just-usage stop" : `just-usage stop --port ${requested}`;
+        if (explicitPort) {
+          const pick = requested < 65535 ? `\nPick another: just-usage serve --port ${requested + 1} (or drop --port to auto-pick).` : "\nDrop --port to auto-pick a free port.";
+          fail(`Port ${requested} is already in use. Stop it with: ${stop}${pick}`);
+        }
+        const further = port < 65535 ? `\nOr start further out: just-usage serve --port ${port + 1}` : "";
+        fail(`Ports ${requested}–${port} are all in use. Stop one with: ${stop}${further}`);
+      }
+      logError("serve.error", e, { host, port });
+      throw e;
     }
-    logError("serve.error", e, { host, port });
-    throw e;
   }
+  if (port !== requested) console.log(`Port ${requested} is in use — serving on ${port} instead.`);
   console.log(`${PACKAGE_NAME} v${VERSION}`);
   for (const u of server.urls) {
     const tag = u.kind === "local" ? "local    " : u.kind === "tailscale" ? "tailscale" : "network  ";
@@ -170,7 +188,11 @@ async function cmdServe(argv: string[]) {
   }
   const stopHint = port === DEFAULT_PORT ? "just-usage stop" : `just-usage stop --port ${port}`;
   console.log(`\nPress Ctrl+C to stop. From another terminal: ${stopHint}`);
-  if (shouldOpen) openInBrowser(server.urls[0]!.url);
+  if (shouldOpen) {
+    openInBrowser(server.urls[0]!.url);
+  } else {
+    console.log("Open one in your browser, or restart with `just-usage serve --open`.");
+  }
 
   const shutdown = () => {
     server.close();
@@ -195,7 +217,7 @@ async function cmdStatus(argv: string[]) {
 function cmdAccounts() {
   const rows = listAccounts();
   log("info", "cli.accounts", { extra: rows.length });
-  console.log("Default accounts come from each CLI's own login (codex login, claude /login, cursor-agent login, grok login --oauth, opencode auth login, agy).");
+  console.log("Default accounts come from each CLI's own login (codex login, claude /login, cursor-agent login, grok login --oauth, opencode auth login, agy, devin auth login).");
   if (rows.length === 0) {
     console.log("\nNo extra accounts. Add one with: just-usage add codex | claude | opencode | antigravity");
     return;
@@ -283,6 +305,8 @@ async function cmdAdd(argv: string[]) {
       fail("Cursor is single-account: just-usage shows whatever `cursor-agent` is logged in as.");
     case "grok":
       fail("Grok is single-account: just-usage shows whatever `grok` is logged in as.");
+    case "devin":
+      fail("Devin is single-account: just-usage shows whatever `devin` is logged in as.");
   }
 }
 

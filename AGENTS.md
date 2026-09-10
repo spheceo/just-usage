@@ -10,11 +10,11 @@ Tabs default to providers that have a live quota (`ok`) or a fetch error. `signe
 
 ## Versioning
 
-Increment the **patch** number (`0.0.X`) when pushing new changes, no matter how large the change is.
+Bump the **patch** number (`0.0.X`) in `package.json` as part of the change, no matter how large it is — `bun run release` releases whatever version is already there.
 
 Do not bump minor or major unless the user explicitly says to. An explicit version from the user wins.
 
-Release with `bun run release` (defaults to patch) or `bun run release patch`.
+Release with `bun run release`. `bun run release patch|minor|major|x.y.z` overrides the version for that release. If the bump was forgotten, release fails with "`vX.Y.Z` already exists" — bump and rerun.
 
 ## Changelog
 

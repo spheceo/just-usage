@@ -2,10 +2,12 @@
  * Cut a release without extra tooling:
  *   bun run release [patch|minor|major|<x.y.z>] [--dry]
  *
- * Defaults to patch (0.0.X). Do not use minor/major unless the user asks.
+ * With no arg it releases the version already in package.json — feature
+ * commits bump it themselves (patch, 0.0.X). An arg overrides that version
+ * for this release. Do not use minor/major unless the user asks.
  *
  * 1. requires a clean tree on `main`
- * 2. bumps package.json, prepends CHANGELOG.md, runs typecheck + tests + build
+ * 2. prepends CHANGELOG.md, runs typecheck + tests + build
  * 3. commits "vX.Y.Z", tags vX.Y.Z, pushes main + tag
  * The tag push triggers .github/workflows/release.yml, which publishes to npm
  * and creates the GitHub Release from the matching CHANGELOG.md section.
@@ -18,7 +20,7 @@ import { formatReleaseNotes, githubRepoFromRemote, parseCommitLog, prependChange
 
 const args = process.argv.slice(2);
 const dry = args.includes("--dry");
-const bump = args.find((a) => !a.startsWith("--")) ?? "patch";
+const bump = args.find((a) => !a.startsWith("--"));
 
 function sh(cmd: string, cmdArgs: string[], opts: { capture?: boolean; allowFail?: boolean } = {}): string {
   if (dry && !opts.capture) {
@@ -50,6 +52,9 @@ const pkg = JSON.parse(pkgRaw) as { version: string };
 const [maj, min, pat] = pkg.version.split(".").map(Number) as [number, number, number];
 let next: string;
 switch (bump) {
+  case undefined:
+    next = pkg.version;
+    break;
   case "patch":
     next = `${maj}.${min}.${pat + 1}`;
     break;
@@ -79,7 +84,7 @@ const log = sh("git", ["log", "--no-merges", "--format=%H%x09%s", range], { capt
 const repo = githubRepoFromRemote(sh("git", ["remote", "get-url", "origin"], { capture: true }));
 const notes = formatReleaseNotes(next, parseCommitLog(log), repo);
 
-console.log(`${pkg.version} → ${next}`);
+console.log(pkg.version === next ? `v${next}` : `${pkg.version} → ${next}`);
 console.log(`\n${notes}`);
 if (!dry) {
   writeFileSync(pkgPath, pkgRaw.replace(`"version": "${pkg.version}"`, `"version": "${next}"`));

@@ -288,9 +288,10 @@
     ["claude", "Claude"],
     ["codex", "Codex"],
     ["cursor", "Cursor"],
-    ["antigravity", "Antigravity"],
+    ["devin", "Devin"],
     ["grok", "Grok"],
-    ["opencode", "OpenCode Go"],
+    ["opencode", "Go"],
+    ["antigravity", "Antigravity"],
   ];
   const SIGNIN_HINT = {
     claude: "Run <code>claude</code>, then <code>/login</code>.",
@@ -299,6 +300,7 @@
     grok: "Run <code>grok login --oauth</code>.",
     opencode: "Run <code>opencode auth login</code> or <code>just-usage add opencode</code>.",
     antigravity: "Run <code>agy</code> and complete Google sign-in.",
+    devin: "Run <code>devin auth login</code>.",
   };
   const $ = (id) => document.getElementById(id);
   let report = null;
@@ -335,22 +337,27 @@
     if (Array.isArray(raw)) {
       const known = new Set(defaultOrder);
       const next = raw.filter((id) => known.has(id));
-      for (const id of defaultOrder) {
-        if (next.includes(id)) continue;
-        const after = defaultOrder.slice(defaultOrder.indexOf(id) + 1).find((x) => next.includes(x));
-        next.splice(after ? next.indexOf(after) : next.length, 0, id);
-      }
-      if (!localStorage.getItem("ju.orderGen") && next[next.length - 1] === "grok") {
-        const i = next.indexOf("opencode");
-        if (i !== -1) {
-          next.pop();
-          next.splice(i, 0, "grok");
+      // An untouched stored order is just an older default — adopt the new one outright.
+      const prevDefault = ["claude", "codex", "cursor", "antigravity", "grok", "opencode"];
+      const untouched = next.length === prevDefault.length && prevDefault.every((id, i) => next[i] === id);
+      if (!untouched) {
+        for (const id of defaultOrder) {
+          if (next.includes(id)) continue;
+          const after = defaultOrder.slice(defaultOrder.indexOf(id) + 1).find((x) => next.includes(x));
+          next.splice(after ? next.indexOf(after) : next.length, 0, id);
         }
+        if (!localStorage.getItem("ju.orderGen") && next[next.length - 1] === "grok") {
+          const i = next.indexOf("opencode");
+          if (i !== -1) {
+            next.pop();
+            next.splice(i, 0, "grok");
+          }
+        }
+        order = next;
       }
-      order = next;
     }
   } catch {}
-  localStorage.setItem("ju.orderGen", "2");
+  localStorage.setItem("ju.orderGen", "3");
   localStorage.setItem("ju.order", JSON.stringify(order));
 
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -499,7 +506,7 @@
     const sliver = shown > 0 && shown < 100;
     return `<div class="win">
       <div class="win-row"><b>${esc(w.label)}</b>
-        <span class="mono"><span class="pct${s ? " " + s : ""}">${pct} ${word}</span>${reset ? ` · ${esc(reset)}` : ""}</span></div>
+        <span class="mono"><span class="pct${s ? " " + s : ""}">${pct}${shown != null ? " " + word : ""}</span>${reset ? ` · ${esc(reset)}` : ""}</span></div>
       <div class="track"><div class="fill${s ? " " + s : ""}${sliver ? " sliver" : ""}" style="width:${bar}%"></div></div>
       ${w.note ? `<div class="note">${esc(w.note)}</div>` : ""}
     </div>`;
@@ -787,10 +794,9 @@
           <button class="pick-btn" type="button" data-id="claude">${logo("claude")} Claude</button>
           <button class="pick-btn" type="button" data-id="codex">${logo("codex")} Codex</button>
           <button class="pick-btn" type="button" data-id="antigravity">${logo("antigravity")} Antigravity</button>
-          <button class="pick-btn" type="button" data-id="opencode">${logo("opencode")} OpenCode Go</button>
+          <button class="pick-btn" type="button" data-id="opencode">${logo("opencode")} Go</button>
         </div>
-        <div class="acct-note">One Cursor account for now — whatever <code>cursor-agent</code> is signed in as.</div>
-        <div class="acct-note">One Grok account for now — whatever <code>grok</code> is signed in as.</div>`;
+        <div class="acct-note">Cursor, Grok and Devin are single-account — they show what <code>cursor-agent</code>, <code>grok</code> and <code>devin</code> are signed in as.</div>`;
     } else if (wizard.step === "label") {
       body = `<div class="acct-note">Optional. Leave blank to show as Account 2, Account 3, …</div>
         <input class="field" id="wiz-label" placeholder="Label (optional)" value="${esc(wizard.label)}" ${noSuggest}>
@@ -807,7 +813,7 @@
           : `<button class="refresh" id="${oauth.start}" type="button">${oauth.action}</button>`}
         <button class="opts-link" id="wiz-back" type="button">Back</button>`;
     } else {
-      const ph = wizard.provider === "claude" ? "Setup token from <code>claude setup-token</code>" : "OpenCode Go API key";
+      const ph = wizard.provider === "claude" ? "Setup token from <code>claude setup-token</code>" : "Go API key";
       body = `<div class="acct-note">${ph}.</div>
         <input class="field" id="wiz-secret" type="password" placeholder="${wizard.provider === "claude" ? "Setup token" : "API key"}" value="${esc(wizard.secret)}" ${noSuggest}>
         <div class="acct-actions"><button class="opts-link" id="wiz-back" type="button">Back</button>

@@ -27,6 +27,7 @@ import antigravityLogo from "./ui/logos/antigravity.svg" with { type: "text" };
 import claudeLogo from "./ui/logos/claude.svg" with { type: "text" };
 import codexLogo from "./ui/logos/codex.svg" with { type: "text" };
 import cursorLogo from "./ui/logos/cursor.svg" with { type: "text" };
+import devinLogo from "./ui/logos/devin.svg" with { type: "text" };
 import grokLogo from "./ui/logos/grok.svg" with { type: "text" };
 import opencodeLogo from "./ui/logos/opencode.svg" with { type: "text" };
 
@@ -37,6 +38,7 @@ const LOGOS: Record<string, string> = {
   opencode: opencodeLogo,
   antigravity: antigravityLogo,
   grok: grokLogo,
+  devin: devinLogo,
 };
 
 export interface ServerOptions {
@@ -87,7 +89,6 @@ function str(v: unknown): string {
 
 export async function startServer(opts: ServerOptions): Promise<{ close: () => void; urls: ListedUrl[] }> {
   const cache = new ReportCache(CACHE_TTL_MS, opts.getUpdate);
-  cache.start(REFRESH_INTERVAL_MS);
   const tailscaleIp = await detectTailscaleIp();
 
   const mutated = async <T>(work: () => Promise<T>): Promise<T> => {
@@ -239,6 +240,7 @@ export async function startServer(opts: ServerOptions): Promise<{ close: () => v
   return new Promise((resolve, reject) => {
     server.once("error", reject);
     server.listen(opts.port, opts.host, () => {
+      cache.start(REFRESH_INTERVAL_MS);
       writeRunRecord({ port: opts.port, host: opts.host });
       const urls = reachableUrls(opts.host, opts.port, tailscaleIp);
       log("info", "serve.start", { host: opts.host, port: opts.port, urls: urls.map((u) => u.url) });

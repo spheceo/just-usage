@@ -5,7 +5,8 @@ import { normalizeCursorUsage, normalizeGrokBotUsage, planFromCursorPlanInfo, to
 import { normalizeAntigravityQuota, parseAgyKeyringBlob, planFromCodeAssist } from "../src/adapters/antigravity.ts";
 import { normalizeGrokCredits, planFromGrokSettings, sessionFromAuthJson } from "../src/adapters/grok.ts";
 import { normalizeOpenCodeUsage } from "../src/adapters/opencode.ts";
-import { antigravityQuota, claudeUsage, claudeUsageLimitsOnly, codexRateLimits, cursorUsage, grokCreditsFree, grokCreditsSubscribed, openCodeUsage } from "./fixtures.ts";
+import { normalizeDevinUserStatus, parseDevinCredentialsToml } from "../src/adapters/devin.ts";
+import { antigravityQuota, claudeUsage, claudeUsageLimitsOnly, codexRateLimits, cursorUsage, devinUserStatus, devinUserStatusAcu, grokCreditsFree, grokCreditsSubscribed, openCodeUsage } from "./fixtures.ts";
 
 describe("codex", () => {
   test("normalizes both windows, plan, multiple limits and reset credits", () => {
@@ -205,5 +206,48 @@ describe("grok", () => {
     });
     expect(session).toMatchObject({ accessToken: "access-token", email: "dev@example.com", authMode: "oidc" });
     expect(sessionFromAuthJson({ auth_mode: "oidc" })).toBeNull();
+  });
+});
+
+describe("devin", () => {
+  test("maps daily/weekly remaining percents to used windows plus on-demand balance", () => {
+    const n = normalizeDevinUserStatus(devinUserStatus);
+    expect(n.email).toBe("dev@example.com");
+    expect(n.plan).toBe("Pro");
+    expect(n.windows.map((w) => w.id)).toEqual(["daily", "weekly", "overage"]);
+    expect(n.windows[0]).toMatchObject({ label: "Daily Usage", usedPercent: 37.5, windowMinutes: 1440, kind: "rolling" });
+    expect(n.windows[0]!.resetsAt).toBe(new Date(1789113600 * 1000).toISOString());
+    expect(n.windows[1]).toMatchObject({ label: "Weekly Usage", usedPercent: 79, windowMinutes: 10080 });
+    expect(n.windows[2]).toMatchObject({ label: "On-demand", usedPercent: null, note: "$7.46 balance" });
+  });
+
+  test("a missing remaining percent with a reset time means the window is exhausted", () => {
+    const n = normalizeDevinUserStatus({
+      userStatus: { planStatus: { dailyQuotaResetAtUnix: "1789113600" } },
+    });
+    expect(n.windows[0]).toMatchObject({ id: "daily", usedPercent: 100 });
+  });
+
+  test("falls back to the ACU window for credits-billed accounts", () => {
+    const n = normalizeDevinUserStatus(devinUserStatusAcu);
+    expect(n.email).toBe("credits@example.com");
+    expect(n.plan).toBe("Team");
+    expect(n.windows.map((w) => w.id)).toEqual(["acu"]);
+    expect(n.windows[0]).toMatchObject({ usedPercent: 28, kind: "cycle", resetsAt: "2026-10-10T17:44:23.000Z", note: "140 of 500 ACUs" });
+  });
+
+  test("returns nothing usable for signed-out or unknown shapes", () => {
+    expect(normalizeDevinUserStatus(null).windows).toEqual([]);
+    expect(normalizeDevinUserStatus({}).windows).toEqual([]);
+    expect(normalizeDevinUserStatus({ userStatus: { email: "a@b.c" } })).toMatchObject({ email: "a@b.c", windows: [] });
+  });
+
+  test("parses credentials.toml", () => {
+    const parsed = parseDevinCredentialsToml(
+      'windsurf_api_key = "devin-session-token$abc"\napi_server_url = "https://server.codeium.com"\n# comment\n',
+    );
+    expect(parsed.windsurf_api_key).toBe("devin-session-token$abc");
+    expect(parsed.api_server_url).toBe("https://server.codeium.com");
+    expect(parseDevinCredentialsToml("")).toEqual({});
   });
 });

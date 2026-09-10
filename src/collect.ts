@@ -34,6 +34,21 @@ export function providerHomeMarkers(id: ProviderId): string[] {
       return [join(home, ".cursor", "auth.json")];
     case "grok":
       return [join(home, ".grok", "auth.json")];
+    case "devin": {
+      const xdg = process.env.XDG_DATA_HOME;
+      const base = xdg && xdg.trim() ? xdg : join(home, ".local", "share");
+      const markers = [
+        join(base, "devin", "credentials.toml"),
+        join(home, ".local", "share", "devin", "credentials.toml"),
+        join(home, ".config", "devin", "config.json"),
+        join(home, "Library", "Application Support", "devin", "credentials.toml"),
+      ];
+      if (process.platform === "win32") {
+        const local = process.env.LOCALAPPDATA;
+        if (local) markers.push(join(local, "devin", "credentials.toml"));
+      }
+      return markers;
+    }
     case "opencode": {
       const xdg = process.env.XDG_DATA_HOME;
       const base = xdg && xdg.trim() ? xdg : join(home, ".local", "share");

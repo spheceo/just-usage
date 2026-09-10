@@ -36,7 +36,9 @@ function renderAccount(a: QuotaSnapshot, now: number): string[] {
   const labelWidth = Math.max(6, ...a.windows.map((w) => w.label.length));
   for (const w of a.windows) {
     const reset = formatResetIn(w.resetsAt, now, w.kind);
-    lines.push(`    ${w.label.padEnd(labelWidth)}  ${bar(w.usedPercent)}  ${pct(w.usedPercent)} used${reset ? c.dim(`  ${reset}`) : ""}`);
+    const used = w.usedPercent === null ? "—" : `${pct(w.usedPercent)} used`;
+    const note = w.note ? c.dim(`  ${w.note}`) : "";
+    lines.push(`    ${w.label.padEnd(labelWidth)}  ${bar(w.usedPercent)}  ${used}${reset ? c.dim(`  ${reset}`) : ""}${note}`);
   }
   if (a.resetCredits && a.resetCredits.availableCount > 0) {
     lines.push(`    ${c.dim(`${a.resetCredits.availableCount} rate-limit reset(s) banked`)}`);

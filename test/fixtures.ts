@@ -148,3 +148,45 @@ export const openCodeUsage = {
     monthly: { status: "ok", percent: 1, resetsAt: "2026-09-13T06:06:01.287Z" },
   },
 };
+
+/** Devin GetUserStatus (quota-billed Pro account). */
+export const devinUserStatus = {
+  userStatus: {
+    pro: true,
+    name: "Dev User",
+    teamId: "devin-team$account-abc",
+    teamStatus: "USER_TEAM_STATUS_APPROVED",
+    email: "dev@example.com",
+    teamsTier: "TEAMS_TIER_DEVIN_PRO",
+    planStatus: {
+      planInfo: {
+        teamsTier: "TEAMS_TIER_DEVIN_PRO",
+        planName: "Pro",
+        isDevin: true,
+        billingStrategy: "BILLING_STRATEGY_QUOTA",
+      },
+      planStart: "2026-09-10T17:44:23Z",
+      planEnd: "2026-10-10T17:44:23Z",
+      availablePromptCredits: -1,
+      dailyQuotaRemainingPercent: 62.5,
+      weeklyQuotaRemainingPercent: 21,
+      overageBalanceMicros: "7456921",
+      dailyQuotaResetAtUnix: "1789113600",
+      weeklyQuotaResetAtUnix: "1789286400",
+    },
+  },
+};
+
+/** Devin GetUserStatus for an ACU/credits-billed account (no quota windows). */
+export const devinUserStatusAcu = {
+  userStatus: {
+    email: "credits@example.com",
+    teamsTier: "TEAMS_TIER_DEVIN_TEAM",
+    planStatus: {
+      planInfo: { planName: "Team", billingStrategy: "BILLING_STRATEGY_CREDITS" },
+      planEnd: "2026-10-10T17:44:23Z",
+      acuConsumed: 140,
+      acuLimit: 500,
+    },
+  },
+};

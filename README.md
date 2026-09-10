@@ -4,7 +4,8 @@ One local page for your coding-CLI subscription quotas. Detects the CLIs install
 
 ```sh
 npm i -g just-usage
-just-usage            # start and open http://<your-host>:5757
+just-usage            # start and print http://<your-host>:5757
+just-usage serve --open  # also open it in a browser
 just-usage stop       # stop that server (same as Ctrl+C)
 just-usage stop --help
 ```
@@ -17,5 +18,6 @@ just-usage stop --help
 - Antigravity (`agy`)
 - Grok (`grok`)
 - OpenCode Go
+- Devin
 
 > Read-only. Credentials stay with the CLIs that own them and never reach the browser. Run `just-usage upgrade` to update.

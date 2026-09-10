@@ -78,7 +78,7 @@ describe("just-usage stop", () => {
   });
 
   test("stops a spawned server on a dedicated port", async () => {
-    const child = spawn("bun", ["run", "src/cli.ts", "serve", "--port", String(port), "--host", "127.0.0.1", "--no-open"], {
+    const child = spawn("bun", ["run", "src/cli.ts", "serve", "--port", String(port), "--host", "127.0.0.1"], {
       cwd: join(import.meta.dir, ".."),
       env: { ...process.env, JUST_USAGE_HOME: home, JUST_USAGE_LOG_DIR: join(home, "logs") },
       stdio: "ignore",
