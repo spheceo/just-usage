@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.0.9
+
+## What's Changed
+Add Command Code quotas, order windows shortest-first, and cut the manual refresh cooldown to one minute in [#6778667](https://github.com/spheceo/just-usage/commit/677866717c2575ae5b7e2254e59409438d300019)
+
 ## v0.0.8
 
 ## What's Changed
