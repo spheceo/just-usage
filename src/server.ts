@@ -3,6 +3,7 @@ import { hostname, networkInterfaces } from "node:os";
 import {
   AccountError,
   addClaudeToken,
+  addCommandCodeKey,
   addOpenCodeKey,
   antigravitySessionStatus,
   beginAntigravityAdd,
@@ -26,6 +27,7 @@ import indexHtml from "./ui/index.html" with { type: "text" };
 import antigravityLogo from "./ui/logos/antigravity.svg" with { type: "text" };
 import claudeLogo from "./ui/logos/claude.svg" with { type: "text" };
 import codexLogo from "./ui/logos/codex.svg" with { type: "text" };
+import commandcodeLogo from "./ui/logos/commandcode.svg" with { type: "text" };
 import cursorLogo from "./ui/logos/cursor.svg" with { type: "text" };
 import devinLogo from "./ui/logos/devin.svg" with { type: "text" };
 import grokLogo from "./ui/logos/grok.svg" with { type: "text" };
@@ -39,6 +41,7 @@ const LOGOS: Record<string, string> = {
   antigravity: antigravityLogo,
   grok: grokLogo,
   devin: devinLogo,
+  commandcode: commandcodeLogo,
 };
 
 export interface ServerOptions {
@@ -160,7 +163,11 @@ export async function startServer(opts: ServerOptions): Promise<{ close: () => v
           json(res, 200, await mutated(() => addOpenCodeKey(secret, label)));
           return;
         }
-        json(res, 400, { error: "Add Claude with a setup-token, OpenCode with an API key, or start a Codex / Antigravity sign-in." });
+        if (provider === "commandcode") {
+          json(res, 200, await mutated(() => addCommandCodeKey(secret, label)));
+          return;
+        }
+        json(res, 400, { error: "Add Claude with a setup-token, OpenCode or Command Code with an API key, or start a Codex / Antigravity sign-in." });
         return;
       }
       if (url.pathname === "/api/accounts/antigravity/start" && method === "POST") {

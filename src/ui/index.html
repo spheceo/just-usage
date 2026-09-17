@@ -292,6 +292,7 @@
     ["grok", "Grok"],
     ["opencode", "Go"],
     ["antigravity", "Antigravity"],
+    ["commandcode", "Command"],
   ];
   const SIGNIN_HINT = {
     claude: "Run <code>claude</code>, then <code>/login</code>.",
@@ -301,6 +302,7 @@
     opencode: "Run <code>opencode auth login</code> or <code>just-usage add opencode</code>.",
     antigravity: "Run <code>agy</code> and complete Google sign-in.",
     devin: "Run <code>devin auth login</code>.",
+    commandcode: "Run <code>cmd login</code>.",
   };
   const $ = (id) => document.getElementById(id);
   let report = null;
@@ -795,6 +797,7 @@
           <button class="pick-btn" type="button" data-id="codex">${logo("codex")} Codex</button>
           <button class="pick-btn" type="button" data-id="antigravity">${logo("antigravity")} Antigravity</button>
           <button class="pick-btn" type="button" data-id="opencode">${logo("opencode")} Go</button>
+          <button class="pick-btn" type="button" data-id="commandcode">${logo("commandcode")} Command</button>
         </div>
         <div class="acct-note">Cursor, Grok and Devin are single-account — they show what <code>cursor-agent</code>, <code>grok</code> and <code>devin</code> are signed in as.</div>`;
     } else if (wizard.step === "label") {
@@ -813,7 +816,7 @@
           : `<button class="refresh" id="${oauth.start}" type="button">${oauth.action}</button>`}
         <button class="opts-link" id="wiz-back" type="button">Back</button>`;
     } else {
-      const ph = wizard.provider === "claude" ? "Setup token from <code>claude setup-token</code>" : "Go API key";
+      const ph = wizard.provider === "claude" ? "Setup token from <code>claude setup-token</code>" : wizard.provider === "commandcode" ? "Command API key" : "Go API key";
       body = `<div class="acct-note">${ph}.</div>
         <input class="field" id="wiz-secret" type="password" placeholder="${wizard.provider === "claude" ? "Setup token" : "API key"}" value="${esc(wizard.secret)}" ${noSuggest}>
         <div class="acct-actions"><button class="opts-link" id="wiz-back" type="button">Back</button>
@@ -1057,7 +1060,7 @@
     try { localStorage.setItem("ju.report", JSON.stringify(next)); } catch {}
   }
 
-  const COOLDOWN_MS = 5 * 60 * 1000;
+  const COOLDOWN_MS = 60 * 1000;
   function refreshUntil() {
     return Number(localStorage.getItem("ju.refreshAt") || 0) + COOLDOWN_MS;
   }
@@ -1067,6 +1070,7 @@
   function refreshLabel() {
     const left = refreshUntil() - Date.now();
     if (left <= 0) return "Refresh data";
+    if (left < 60_000) return `Refresh in ${Math.max(1, Math.ceil(left / 1000))}s`;
     const min = Math.max(1, Math.ceil(left / 60000));
     return `Refresh in ${min}m`;
   }

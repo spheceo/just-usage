@@ -19,5 +19,6 @@ just-usage stop --help
 - Grok (`grok`)
 - OpenCode Go
 - Devin
+- Command Code (`cmd`, `cmdc` on Windows)
 
 > Read-only. Credentials stay with the CLIs that own them and never reach the browser. Run `just-usage upgrade` to update.

@@ -282,7 +282,7 @@ function usageLabel(minutes: number | null, fallback: string): string {
   return fallback.replace(/\s+remaining$/i, "").trim() || "Usage";
 }
 
-/** `remainingFraction` is leftover quota; the dashboard shows used percent. */
+/** `remainingFraction` is leftover quota; the dashboard shows used percent. Each group lists its shortest window first (5h, then weekly). */
 export function normalizeAntigravityQuota(body: unknown): QuotaWindow[] {
   if (!isObject(body) || !Array.isArray(body.groups)) return [];
   const out: QuotaWindow[] = [];
@@ -290,15 +290,16 @@ export function normalizeAntigravityQuota(body: unknown): QuotaWindow[] {
     if (!isObject(group) || !Array.isArray(group.buckets)) continue;
     const rawGroup = typeof group.displayName === "string" && group.displayName.trim() ? group.displayName.trim() : undefined;
     const groupName = rawGroup && !/^gemini models$/i.test(rawGroup) ? rawGroup : undefined;
+    const windows: QuotaWindow[] = [];
     for (const bucket of group.buckets) {
       if (!isObject(bucket) || bucket.disabled === true) continue;
       const remaining = typeof bucket.remainingFraction === "number" ? bucket.remainingFraction : null;
       const used = remaining === null ? null : clampPercent((1 - remaining) * 100);
       if (used === null) continue;
-      const id = typeof bucket.bucketId === "string" && bucket.bucketId ? bucket.bucketId : `${groupName ?? "quota"}:${out.length}`;
+      const id = typeof bucket.bucketId === "string" && bucket.bucketId ? bucket.bucketId : `${groupName ?? "quota"}:${out.length + windows.length}`;
       const minutes = windowMinutes(typeof bucket.window === "string" ? bucket.window : undefined);
       const fallback = typeof bucket.displayName === "string" ? bucket.displayName : "Usage";
-      out.push({
+      windows.push({
         id,
         label: usageLabel(minutes, fallback),
         group: groupName,
@@ -308,6 +309,8 @@ export function normalizeAntigravityQuota(body: unknown): QuotaWindow[] {
         kind: "rolling",
       });
     }
+    windows.sort((a, b) => (a.windowMinutes ?? Infinity) - (b.windowMinutes ?? Infinity));
+    out.push(...windows);
   }
   return out;
 }

@@ -3,7 +3,7 @@ import { parseArgs } from "node:util";
 import { createInterface } from "node:readline";
 import { codexLogin } from "./adapters/codex.ts";
 import { claudeAuthStatus } from "./adapters/claude.ts";
-import { addClaudeToken, addOpenCodeKey, beginAntigravityAdd, removeExtraAccount, saveCodexProfile, submitAntigravityCallback } from "./accounts.ts";
+import { addClaudeToken, addCommandCodeKey, addOpenCodeKey, beginAntigravityAdd, removeExtraAccount, saveCodexProfile, submitAntigravityCallback } from "./accounts.ts";
 import { collectReport } from "./collect.ts";
 import { DEFAULT_HOST, DEFAULT_PORT, PACKAGE_NAME, VERSION, ensureDir } from "./config.ts";
 import { log, logError } from "./log.ts";
@@ -29,7 +29,7 @@ Usage
       --all                      Stop every just-usage server this CLI started
   just-usage status [--json]     Print quotas in the terminal
   just-usage accounts            List accounts
-  just-usage add <provider>      Add an account (codex | claude | opencode | antigravity)
+  just-usage add <provider>      Add an account (codex | claude | opencode | antigravity | commandcode)
       --label <name>             Friendly name
       --token                    Claude only: paste a \`claude setup-token\` instead of a profile login
   just-usage login <account-id>  Re-authenticate a profile account
@@ -43,6 +43,7 @@ Cursor uses whatever \`cursor-agent\` is logged in as (single account).
 Grok uses whatever \`grok login --oauth\` stored (single account).
 Devin uses whatever \`devin auth login\` stored (single account).
 Antigravity extras are extra Google logins; they do not replace \`agy\`'s signed-in account.
+Command Code uses whatever \`cmd login\` stored; extras are API keys.
 
 Logs are appended to ~/.just-usage/logs (one JSON line per action).
 
@@ -217,9 +218,9 @@ async function cmdStatus(argv: string[]) {
 function cmdAccounts() {
   const rows = listAccounts();
   log("info", "cli.accounts", { extra: rows.length });
-  console.log("Default accounts come from each CLI's own login (codex login, claude /login, cursor-agent login, grok login --oauth, opencode auth login, agy, devin auth login).");
+  console.log("Default accounts come from each CLI's own login (codex login, claude /login, cursor-agent login, grok login --oauth, opencode auth login, agy, devin auth login, cmd login).");
   if (rows.length === 0) {
-    console.log("\nNo extra accounts. Add one with: just-usage add codex | claude | opencode | antigravity");
+    console.log("\nNo extra accounts. Add one with: just-usage add codex | claude | opencode | antigravity | commandcode");
     return;
   }
   console.log("");
@@ -284,6 +285,17 @@ async function addOpenCodeCli(label: string | undefined) {
   }
 }
 
+async function addCommandCodeCli(label: string | undefined) {
+  console.log("Paste a Command Code API key.");
+  const key = await prompt("Key: ", { secret: true });
+  try {
+    const { account } = await addCommandCodeKey(key, label);
+    console.log(`Added ${account.id}${account.email ? ` (${account.email})` : ""}.`);
+  } catch (e) {
+    fail(e instanceof Error ? e.message : String(e));
+  }
+}
+
 async function cmdAdd(argv: string[]) {
   const { values, positionals } = parseArgs({
     args: argv,
@@ -291,7 +303,7 @@ async function cmdAdd(argv: string[]) {
     allowPositionals: true,
   });
   const provider = positionals[0];
-  if (!isProvider(provider)) fail(`Usage: just-usage add <codex|claude|opencode|antigravity> [--label name] [--token]`);
+  if (!isProvider(provider)) fail(`Usage: just-usage add <codex|claude|opencode|antigravity|commandcode> [--label name] [--token]`);
   switch (provider) {
     case "codex":
       return addCodex(values.label);
@@ -307,6 +319,8 @@ async function cmdAdd(argv: string[]) {
       fail("Grok is single-account: just-usage shows whatever `grok` is logged in as.");
     case "devin":
       fail("Devin is single-account: just-usage shows whatever `devin` is logged in as.");
+    case "commandcode":
+      return addCommandCodeCli(values.label);
   }
 }
 

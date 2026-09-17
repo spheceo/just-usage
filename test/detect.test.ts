@@ -38,6 +38,10 @@ describe("CLI discovery", () => {
     expect(providerHomeMarkers("antigravity").some((p) => p.endsWith("antigravity-oauth-token"))).toBe(true);
   });
 
+  test("commandcode home markers include the auth file", () => {
+    expect(providerHomeMarkers("commandcode").some((p) => p.endsWith(join(".commandcode", "auth.json")))).toBe(true);
+  });
+
   test("server refresh interval is five minutes", () => {
     expect(REFRESH_INTERVAL_MS).toBe(5 * 60 * 1000);
   });

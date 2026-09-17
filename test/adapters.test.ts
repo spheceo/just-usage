@@ -6,7 +6,8 @@ import { normalizeAntigravityQuota, parseAgyKeyringBlob, planFromCodeAssist } fr
 import { normalizeGrokCredits, planFromGrokSettings, sessionFromAuthJson } from "../src/adapters/grok.ts";
 import { normalizeOpenCodeUsage } from "../src/adapters/opencode.ts";
 import { normalizeDevinUserStatus, parseDevinCredentialsToml } from "../src/adapters/devin.ts";
-import { antigravityQuota, claudeUsage, claudeUsageLimitsOnly, codexRateLimits, cursorUsage, devinUserStatus, devinUserStatusAcu, grokCreditsFree, grokCreditsSubscribed, openCodeUsage } from "./fixtures.ts";
+import { normalizeCommandCodeQuota, planFromCommandCodeSub } from "../src/adapters/commandcode.ts";
+import { antigravityQuota, claudeUsage, claudeUsageLimitsOnly, codexRateLimits, commandcodeUsage, cursorUsage, devinUserStatus, devinUserStatusAcu, grokCreditsFree, grokCreditsSubscribed, openCodeUsage } from "./fixtures.ts";
 
 describe("codex", () => {
   test("normalizes both windows, plan, multiple limits and reset credits", () => {
@@ -119,14 +120,14 @@ describe("opencode go", () => {
 });
 
 describe("antigravity", () => {
-  test("turns remainingFraction into used windows grouped by family", () => {
+  test("turns remainingFraction into used windows grouped by family, 5h before weekly", () => {
     const w = normalizeAntigravityQuota(antigravityQuota);
-    expect(w.map((x) => x.id)).toEqual(["gemini-weekly", "gemini-5h", "3p-weekly", "3p-5h"]);
-    expect(w[0]).toMatchObject({ label: "Weekly Usage", usedPercent: 20, windowMinutes: 10080, kind: "rolling" });
+    expect(w.map((x) => x.id)).toEqual(["gemini-5h", "gemini-weekly", "3p-5h", "3p-weekly"]);
+    expect(w[0]).toMatchObject({ label: "5h Usage", usedPercent: 75, windowMinutes: 300, kind: "rolling", resetsAt: "2026-09-04T23:40:30.000Z" });
     expect(w[0]!.group).toBeUndefined();
-    expect(w[1]).toMatchObject({ label: "5h Usage", usedPercent: 75, windowMinutes: 300, resetsAt: "2026-09-04T23:40:30.000Z" });
-    expect(w[2]).toMatchObject({ usedPercent: 0, group: "Claude and GPT models" });
-    expect(w[3]).toMatchObject({ usedPercent: 100 });
+    expect(w[1]).toMatchObject({ label: "Weekly Usage", usedPercent: 20, windowMinutes: 10080 });
+    expect(w[2]).toMatchObject({ usedPercent: 100, group: "Claude and GPT models" });
+    expect(w[3]).toMatchObject({ usedPercent: 0 });
   });
 
   test("skips disabled buckets and unknown shapes", () => {
@@ -206,6 +207,55 @@ describe("grok", () => {
     });
     expect(session).toMatchObject({ accessToken: "access-token", email: "dev@example.com", authMode: "oidc" });
     expect(sessionFromAuthJson({ auth_mode: "oidc" })).toBeNull();
+  });
+});
+
+describe("commandcode", () => {
+  test("maps 5h/weekly window limits then the monthly pool", () => {
+    const n = normalizeCommandCodeQuota(commandcodeUsage);
+    expect(n.plan).toBe("GOAT");
+    expect(n.windows.map((w) => w.id)).toEqual(["five_hour", "weekly", "monthly"]);
+    expect(n.windows[0]).toMatchObject({ label: "5h Usage", usedPercent: 16, windowMinutes: 300, kind: "rolling", note: "$2.24 of $14" });
+    expect(n.windows[0]!.resetsAt).toBe(new Date(1789653280343).toISOString());
+    expect(n.windows[1]).toMatchObject({ label: "Weekly Usage", usedPercent: 6.4, windowMinutes: 10080, note: "$2.24 of $35" });
+    expect(n.windows[2]).toMatchObject({
+      label: "Monthly Usage",
+      usedPercent: 3.2,
+      kind: "cycle",
+      resetsAt: "2026-10-17T08:45:42.000Z",
+      note: "$2.24 of $70",
+    });
+  });
+
+  test("skips window limits when the account is not limited", () => {
+    const n = normalizeCommandCodeQuota({
+      ...commandcodeUsage,
+      credits: { ...commandcodeUsage.credits, windowLimits: { limited: false } },
+    });
+    expect(n.windows.map((w) => w.id)).toEqual(["monthly"]);
+  });
+
+  test("falls back to spent+remaining pool when the plan is unknown or inactive", () => {
+    const n = normalizeCommandCodeQuota({
+      ...commandcodeUsage,
+      subscription: { success: true, data: { status: "canceled", planId: "mystery" } },
+    });
+    expect(n.plan).toBeNull();
+    // pool = spent (1.51) + remaining (67.76) → 69.27; used = 1.51 → ~2.2%
+    expect(n.windows.find((w) => w.id === "monthly")).toMatchObject({ usedPercent: 2.2, resetsAt: null });
+  });
+
+  test("reads plan names from the planId prefix table", () => {
+    expect(planFromCommandCodeSub("individual-goat")).toMatchObject({ name: "GOAT", monthlyCredits: 70 });
+    expect(planFromCommandCodeSub("individual_pro_v1")).toMatchObject({ name: "Pro", monthlyCredits: 80 });
+    expect(planFromCommandCodeSub("teams-pro")).toMatchObject({ name: "Teams Pro", monthlyCredits: 40 });
+    expect(planFromCommandCodeSub("mystery")).toBeNull();
+    expect(planFromCommandCodeSub(null)).toBeNull();
+  });
+
+  test("returns nothing usable for garbage", () => {
+    expect(normalizeCommandCodeQuota({ credits: null, subscription: null, summary: null }).windows).toEqual([]);
+    expect(normalizeCommandCodeQuota({ credits: { credits: {} }, subscription: null, summary: null }).windows).toEqual([]);
   });
 });
 

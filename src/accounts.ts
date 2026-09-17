@@ -9,6 +9,7 @@ import {
 } from "./adapters/antigravity.ts";
 import { verifyClaudeToken } from "./adapters/claude.ts";
 import { startCodexLogin, type CodexLoginHandle } from "./adapters/codex.ts";
+import { verifyCommandCodeKey } from "./adapters/commandcode.ts";
 import { fetchOpenCodeUsage } from "./adapters/opencode.ts";
 import { ensureDir } from "./config.ts";
 import { log, logError } from "./log.ts";
@@ -80,6 +81,27 @@ export async function addOpenCodeKey(key: string, label?: string): Promise<AddRe
     account,
     warning: status === 403 ? "Key is valid but has no active OpenCode Go subscription." : undefined,
   };
+}
+
+export async function addCommandCodeKey(key: string, label?: string): Promise<AddResult> {
+  const secret = key.trim();
+  if (!secret) throw new AccountError("No key given.");
+  const check = await verifyCommandCodeKey(secret);
+  if (!check.ok) throw new AccountError(`Key check failed: ${check.message}`);
+  const named = label?.trim() || "";
+  const id = newAccountId("commandcode", named || check.email || "account");
+  await secretStore().set(id, secret);
+  const account: AccountRecord = {
+    id,
+    provider: "commandcode",
+    label: named,
+    kind: "token",
+    email: check.email,
+    createdAt: new Date().toISOString(),
+  };
+  saveAccount(account);
+  log("info", "account.add", { account: account.id, provider: account.provider, kind: account.kind });
+  return { account };
 }
 
 export function renameExtraAccount(id: string, label: string): AccountRecord {

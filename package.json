@@ -1,7 +1,7 @@
 {
   "name": "just-usage",
-  "version": "0.0.8",
-  "description": "One local page for your coding-CLI subscription quotas: Claude, Codex, Cursor, Antigravity, Grok, OpenCode Go, Devin.",
+  "version": "0.0.9",
+  "description": "One local page for your coding-CLI subscription quotas: Claude, Codex, Cursor, Antigravity, Grok, OpenCode Go, Devin, Command Code.",
   "type": "module",
   "license": "MIT",
   "author": "spheceo",
@@ -19,6 +19,7 @@
     "antigravity",
     "grok",
     "devin",
+    "commandcode",
     "quota",
     "usage",
     "rate-limit",

@@ -1,4 +1,4 @@
-export type ProviderId = "claude" | "codex" | "cursor" | "opencode" | "antigravity" | "grok" | "devin";
+export type ProviderId = "claude" | "codex" | "cursor" | "opencode" | "antigravity" | "grok" | "devin" | "commandcode";
 
 export const PROVIDERS: ReadonlyArray<{ id: ProviderId; name: string; bin: string }> = [
   { id: "claude", name: "Claude", bin: "claude" },
@@ -8,6 +8,8 @@ export const PROVIDERS: ReadonlyArray<{ id: ProviderId; name: string; bin: strin
   { id: "grok", name: "Grok", bin: "grok" },
   { id: "opencode", name: "OpenCode Go", bin: "opencode" },
   { id: "antigravity", name: "Antigravity", bin: "agy" },
+  // `cmd` on Windows is the system shell; Command Code installs there as `cmdc`.
+  { id: "commandcode", name: "Command", bin: process.platform === "win32" ? "cmdc" : "cmd" },
 ];
 
 export function providerName(id: ProviderId): string {

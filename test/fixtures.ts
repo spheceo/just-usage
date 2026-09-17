@@ -177,6 +177,35 @@ export const devinUserStatus = {
   },
 };
 
+/** Command Code /alpha/billing/credits + /alpha/billing/subscriptions + /alpha/usage/summary (GOAT plan). */
+export const commandcodeUsage = {
+  credits: {
+    credits: {
+      belowThreshold: false,
+      creditThreshold: 0,
+      monthlyCredits: 67.7628701151,
+      purchasedCredits: 0,
+      freeCredits: 0,
+    },
+    windowLimits: {
+      limited: true,
+      exceeded: null,
+      fiveHour: { used: 2.2371298849, cap: 14, exceeded: false, resetAt: 1789653280343 },
+      weekly: { used: 2.2371298849, cap: 35, exceeded: false, resetAt: 1790240080343 },
+    },
+  },
+  subscription: {
+    success: true,
+    data: {
+      status: "active",
+      planId: "individual-goat",
+      currentPeriodStart: "2026-09-17T08:45:42.000Z",
+      currentPeriodEnd: "2026-10-17T08:45:42.000Z",
+    },
+  },
+  summary: { totalCost: 1.5069821763999998, totalCount: 23, periodBasis: "billing-period" },
+};
+
 /** Devin GetUserStatus for an ACU/credits-billed account (no quota windows). */
 export const devinUserStatusAcu = {
   userStatus: {

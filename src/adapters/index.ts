@@ -2,6 +2,7 @@ import type { QuotaSnapshot, ResolvedAccount } from "../types.ts";
 import { fetchAntigravity } from "./antigravity.ts";
 import { fetchClaude } from "./claude.ts";
 import { fetchCodex } from "./codex.ts";
+import { fetchCommandCode } from "./commandcode.ts";
 import { fetchCursor } from "./cursor.ts";
 import { fetchDevin } from "./devin.ts";
 import { fetchGrok } from "./grok.ts";
@@ -23,5 +24,7 @@ export function fetchSnapshot(account: ResolvedAccount): Promise<QuotaSnapshot> 
       return fetchOpenCode(account);
     case "devin":
       return fetchDevin(account);
+    case "commandcode":
+      return fetchCommandCode(account);
   }
 }

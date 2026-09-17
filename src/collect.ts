@@ -34,6 +34,8 @@ export function providerHomeMarkers(id: ProviderId): string[] {
       return [join(home, ".cursor", "auth.json")];
     case "grok":
       return [join(home, ".grok", "auth.json")];
+    case "commandcode":
+      return [join(home, ".commandcode", "auth.json"), join(home, ".commandcode", "config.json")];
     case "devin": {
       const xdg = process.env.XDG_DATA_HOME;
       const base = xdg && xdg.trim() ? xdg : join(home, ".local", "share");
