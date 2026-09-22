@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.0.10
+
+## What's Changed
+Refresh expired CLI tokens, split fused plan names like Pro Lite, and let short panels hug their content in [#974e032](https://github.com/spheceo/just-usage/commit/974e032dce920cacdd2b905bb87ef29f43bc2cb3)
+
 ## v0.0.9
 
 ## What's Changed
