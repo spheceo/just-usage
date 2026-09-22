@@ -42,6 +42,13 @@ describe("time + percent helpers", () => {
     expect(formatPlan("api key")).toBe("Api Key");
     expect(formatPlan(null)).toBeNull();
   });
+  test("formatPlan splits fused and separator'd plan slugs", () => {
+    expect(formatPlan("prolite")).toBe("Pro Lite");
+    expect(formatPlan("proLite")).toBe("Pro Lite");
+    expect(formatPlan("pro-lite")).toBe("Pro Lite");
+    expect(formatPlan("self_serve_business_prolite")).toBe("Self Serve Business Pro Lite");
+    expect(formatPlan("x_premium_plus")).toBe("X Premium Plus");
+  });
   test("windowLabel", () => {
     expect(windowLabel(300)).toBe("5h Usage");
     expect(windowLabel(10080)).toBe("Weekly Usage");

@@ -7,7 +7,7 @@
  * Default credentials: `~/.grok/auth.json` (OIDC access + refresh). An xAI API key is a
  * different product (prepaid console) and has no SuperGrok / Grok Build pool.
  */
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { clampPercent, isoOrNull } from "../format.ts";
@@ -169,6 +169,39 @@ function headers(token: string, version: string, email: string | null): Record<s
   return h;
 }
 
+/**
+ * Write refreshed tokens back into auth.json. If xAI rotated the refresh token, losing
+ * the new one would strand `grok`'s own login. Skipped when the file has moved on
+ * (the entry no longer carries the tokens we consumed — grok refreshed it itself).
+ */
+export function persistGrokSession(prev: GrokSession, next: GrokSession): void {
+  const file = authFile();
+  try {
+    const parsed: unknown = JSON.parse(readFileSync(file, "utf8"));
+    if (!isObject(parsed)) return;
+    const isPrev = (e: JsonObject) =>
+      (prev.refreshToken !== null && e.refresh_token === prev.refreshToken) || e.key === prev.accessToken;
+    const patch = (e: JsonObject) => {
+      e.key = next.accessToken;
+      if (next.refreshToken) e.refresh_token = next.refreshToken;
+      if (next.expiresAt) e.expires_at = new Date(next.expiresAt).toISOString();
+    };
+    if (typeof parsed.key === "string") {
+      if (!isPrev(parsed)) return;
+      patch(parsed);
+    } else {
+      const entry = Object.values(parsed).filter(isObject).find(isPrev);
+      if (!entry) return;
+      patch(entry);
+    }
+    const tmp = `${file}.just-usage-tmp`;
+    writeFileSync(tmp, `${JSON.stringify(parsed, null, 2)}\n`, { mode: 0o600 });
+    renameSync(tmp, file);
+  } catch {
+    // Best effort — a failed write just means the next fetch refreshes again.
+  }
+}
+
 async function refreshAccessToken(session: GrokSession): Promise<GrokSession | null> {
   if (!session.refreshToken || !session.clientId) return null;
   const res = await fetchJson(TOKEN_URL, {
@@ -184,12 +217,14 @@ async function refreshAccessToken(session: GrokSession): Promise<GrokSession | n
     return null;
   }
   const expiresIn = typeof res.body.expires_in === "number" ? res.body.expires_in : 3600;
-  return {
+  const next = {
     ...session,
     accessToken: res.body.access_token,
     refreshToken: typeof res.body.refresh_token === "string" && res.body.refresh_token ? res.body.refresh_token : session.refreshToken,
     expiresAt: Date.now() + expiresIn * 1000,
   };
+  persistGrokSession(session, next);
+  return next;
 }
 
 async function liveSession(session: GrokSession): Promise<GrokSession | null> {

@@ -189,7 +189,15 @@ export async function fetchCodex(account: ResolvedAccount): Promise<QuotaSnapsho
     if (info.type === "apiKey") {
       return snapshot(account, "unsupported", { email, plan: "api key", message: "API-key logins have no subscription windows." });
     }
-    const raw = await client.request("account/rateLimits/read", {});
+    let raw: unknown;
+    try {
+      raw = await client.request("account/rateLimits/read", {});
+    } catch {
+      // A stale token can fail the first call; the app-server owns the OAuth
+      // tokens, so force its refresh and try once more.
+      await client.request("account/read", { refreshToken: true }).catch(() => null);
+      raw = await client.request("account/rateLimits/read", {});
+    }
     const norm = normalizeCodexRateLimits(raw);
     return snapshot(account, "ok", {
       email,

@@ -6,13 +6,16 @@
  * Credential sources, in order of preference:
  *   - token accounts: a `claude setup-token` value the user pasted, held in our secret store
  *   - profile/default accounts: Claude Code's own credential (macOS Keychain, or .credentials.json)
- * Tokens are read into memory for one request and never written anywhere by us.
+ * When the access token has expired we run the same refresh_token grant `claude` uses and
+ * write the rotated tokens back to the store they were read from — losing the new refresh
+ * token would strand the CLI's own login.
  */
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { homedir, userInfo } from "node:os";
 import { join } from "node:path";
 import { clampPercent, isoOrNull } from "../format.ts";
+import { log } from "../log.ts";
 import { binVersion, run } from "../proc.ts";
 import { secretStore } from "../secrets.ts";
 import type { QuotaSnapshot, QuotaWindow, ResolvedAccount } from "../types.ts";
@@ -20,13 +23,24 @@ import { errorMessage, fetchJson, isObject, snapshot, type JsonObject } from "./
 
 const USAGE_URL = "https://api.anthropic.com/api/oauth/usage";
 const PROFILE_URL = "https://api.anthropic.com/api/oauth/profile";
+/** Same refresh endpoint and public client id Claude Code itself uses. */
+const TOKEN_URL = "https://platform.claude.com/v1/oauth/token";
+const CLIENT_ID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e";
+const SCOPES = "user:profile user:inference user:sessions:claude_code user:mcp_servers user:file_upload";
 const FALLBACK_CLI_VERSION = "2.1.259";
 
 interface ClaudeCreds {
   accessToken: string;
+  refreshToken: string | null;
   expiresAt: number | null;
+  refreshTokenExpiresAt: number | null;
   subscriptionType: string | null;
 }
+
+/** Where the credential blob came from, so a refreshed token can be written back. */
+type CredStore =
+  | { kind: "keychain"; service: string; raw: string }
+  | { kind: "file"; path: string };
 
 function keychainService(configDir: string | undefined): string {
   if (!configDir) return "Claude Code-credentials";
@@ -41,7 +55,9 @@ function parseCreds(text: string): ClaudeCreds | null {
     if (!o || typeof o.accessToken !== "string" || !o.accessToken) return null;
     return {
       accessToken: o.accessToken,
+      refreshToken: typeof o.refreshToken === "string" && o.refreshToken ? o.refreshToken : null,
       expiresAt: typeof o.expiresAt === "number" ? o.expiresAt : null,
+      refreshTokenExpiresAt: typeof o.refreshTokenExpiresAt === "number" ? o.refreshTokenExpiresAt : null,
       subscriptionType: typeof o.subscriptionType === "string" ? o.subscriptionType : null,
     };
   } catch {
@@ -49,18 +65,115 @@ function parseCreds(text: string): ClaudeCreds | null {
   }
 }
 
+function credentialsFile(configDir: string | undefined): string {
+  return join(configDir ?? join(homedir(), ".claude"), ".credentials.json");
+}
+
 /** Read Claude Code's stored OAuth credential for a config dir (undefined = ~/.claude). */
-export async function readClaudeCredentials(configDir: string | undefined): Promise<ClaudeCreds | null> {
+export async function readClaudeCredentials(
+  configDir: string | undefined,
+): Promise<{ creds: ClaudeCreds; store: CredStore } | null> {
   if (process.platform === "darwin") {
-    const res = await run("security", ["find-generic-password", "-s", keychainService(configDir), "-w"], { timeoutMs: 20_000 });
+    const service = keychainService(configDir);
+    const res = await run("security", ["find-generic-password", "-s", service, "-w"], { timeoutMs: 20_000 });
     if (res.code === 0) {
-      const creds = parseCreds(res.stdout.trim());
-      if (creds) return creds;
+      const raw = res.stdout.trim();
+      const creds = parseCreds(raw);
+      if (creds) return { creds, store: { kind: "keychain", service, raw } };
     }
   }
-  const file = join(configDir ?? join(homedir(), ".claude"), ".credentials.json");
-  if (existsSync(file)) return parseCreds(readFileSync(file, "utf8"));
+  const file = credentialsFile(configDir);
+  if (existsSync(file)) {
+    const creds = parseCreds(readFileSync(file, "utf8"));
+    if (creds) return { creds, store: { kind: "file", path: file } };
+  }
   return null;
+}
+
+interface RefreshedToken {
+  accessToken: string;
+  refreshToken: string;
+  expiresAt: number;
+  refreshTokenExpiresAt: number | null;
+}
+
+/** `refresh_token` grant against the same endpoint `claude` uses. "rejected" = the session is dead. */
+export async function refreshClaudeToken(
+  refreshToken: string,
+): Promise<{ ok: true; token: RefreshedToken } | { ok: false; rejected: boolean; detail: string }> {
+  let res: Awaited<ReturnType<typeof fetchJson>>;
+  try {
+    res = await fetchJson(TOKEN_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({
+        grant_type: "refresh_token",
+        refresh_token: refreshToken,
+        client_id: CLIENT_ID,
+        scope: SCOPES,
+      }),
+    });
+  } catch (e) {
+    return { ok: false, rejected: false, detail: errorMessage(e) };
+  }
+  const body = isObject(res.body) ? res.body : null;
+  if (res.status !== 200 || !body || typeof body.access_token !== "string" || !body.access_token) {
+    const err = typeof body?.error === "string" ? body.error : "";
+    const detail = err || `HTTP ${res.status}`;
+    const rejected = res.status === 400 || res.status === 401 || err === "invalid_grant";
+    return { ok: false, rejected, detail };
+  }
+  const expiresIn = typeof body.expires_in === "number" ? body.expires_in : 28_800;
+  const rtExpiresIn = typeof body.refresh_token_expires_in === "number" ? body.refresh_token_expires_in : null;
+  return {
+    ok: true,
+    token: {
+      accessToken: body.access_token,
+      refreshToken: typeof body.refresh_token === "string" && body.refresh_token ? body.refresh_token : refreshToken,
+      expiresAt: Date.now() + expiresIn * 1000,
+      refreshTokenExpiresAt: rtExpiresIn !== null ? Date.now() + rtExpiresIn * 1000 : null,
+    },
+  };
+}
+
+/**
+ * Merge refreshed tokens into the credential JSON. Returns null when the store has
+ * moved on (e.g. `claude` refreshed itself) — the current contents win.
+ */
+export function mergeRefreshedCreds(parsed: unknown, prev: ClaudeCreds, next: RefreshedToken): JsonObject | null {
+  if (!isObject(parsed) || !isObject(parsed.claudeAiOauth)) return null;
+  const o = parsed.claudeAiOauth;
+  if (prev.refreshToken && o.refreshToken !== prev.refreshToken) return null;
+  o.accessToken = next.accessToken;
+  o.refreshToken = next.refreshToken;
+  o.expiresAt = next.expiresAt;
+  if (next.refreshTokenExpiresAt !== null) o.refreshTokenExpiresAt = next.refreshTokenExpiresAt;
+  else delete o.refreshTokenExpiresAt;
+  return parsed;
+}
+
+/** Write refreshed creds back to the store they were read from. Best effort. */
+async function persistCreds(store: CredStore, prev: ClaudeCreds, next: RefreshedToken): Promise<boolean> {
+  try {
+    if (store.kind === "file") {
+      const merged = mergeRefreshedCreds(JSON.parse(readFileSync(store.path, "utf8")), prev, next);
+      if (!merged) return false;
+      const tmp = `${store.path}.just-usage-tmp`;
+      writeFileSync(tmp, JSON.stringify(merged), { mode: 0o600 });
+      renameSync(tmp, store.path);
+      return true;
+    }
+    const merged = mergeRefreshedCreds(JSON.parse(store.raw), prev, next);
+    if (!merged) return false;
+    // Claude Code stores the item under account = login username.
+    const account = process.env.USER || userInfo().username;
+    const res = await run("security", ["add-generic-password", "-U", "-a", account, "-s", store.service, "-w", JSON.stringify(merged)], {
+      timeoutMs: 10_000,
+    });
+    return res.code === 0;
+  } catch {
+    return false;
+  }
 }
 
 export async function claudeAuthStatus(configDir: string | undefined): Promise<{ loggedIn: boolean } | null> {
@@ -146,24 +259,54 @@ export function normalizeClaudeUsage(body: unknown): QuotaWindow[] {
 
 // ---- fetch ---------------------------------------------------------------
 
-async function resolveToken(account: ResolvedAccount): Promise<
-  { token: string; plan: string | null } | { fail: QuotaSnapshot }
-> {
+function loginHint(account: ResolvedAccount): string {
+  return account.kind === "default" ? "Run `claude` and `/login`." : `Run \`just-usage login ${account.id}\`.`;
+}
+
+async function resolveToken(
+  account: ResolvedAccount,
+  force = false,
+): Promise<{ token: string; plan: string | null } | { fail: QuotaSnapshot }> {
   if (account.kind === "token") {
     const token = await secretStore().get(account.id);
     if (!token) return { fail: snapshot(account, "error", { message: "Stored token missing. Run `just-usage remove` and add it again." }) };
     return { token, plan: null };
   }
-  const creds = await readClaudeCredentials(account.path);
-  if (!creds) {
-    const hint = account.kind === "default" ? "Run `claude` and `/login`." : `Run \`just-usage login ${account.id}\`.`;
-    return { fail: snapshot(account, "signed_out", { message: `Not signed in. ${hint}` }) };
+  const found = await readClaudeCredentials(account.path);
+  if (!found) {
+    return { fail: snapshot(account, "signed_out", { message: `Not signed in. ${loginHint(account)}` }) };
   }
-  if (creds.expiresAt && creds.expiresAt < Date.now()) {
-    const hint = account.kind === "default" ? "Open `claude` once to refresh it." : `Run \`CLAUDE_CONFIG_DIR=${account.path} claude\` once to refresh it.`;
-    return { fail: snapshot(account, "error", { plan: creds.subscriptionType, message: `Access token expired. ${hint}` }) };
+  const { creds, store } = found;
+  const expired = creds.expiresAt !== null && creds.expiresAt <= Date.now() + 60_000;
+  if (!expired && !force) return { token: creds.accessToken, plan: creds.subscriptionType };
+
+  // refreshTokenExpiresAt can be stale — let the server decide whether the session is dead.
+  if (creds.refreshToken) {
+    const refreshed = await refreshClaudeToken(creds.refreshToken);
+    if (refreshed.ok) {
+      if (!(await persistCreds(store, creds, refreshed.token))) {
+        log("warn", "claude.refresh.persist", { account: account.id, store: store.kind, ok: false });
+      }
+      return { token: refreshed.token.accessToken, plan: creds.subscriptionType };
+    }
+    if (refreshed.rejected) {
+      return { fail: snapshot(account, "error", { plan: creds.subscriptionType, message: `Claude session expired. ${loginHint(account)}` }) };
+    }
+    if (force) return { token: creds.accessToken, plan: creds.subscriptionType };
+    return {
+      fail: snapshot(account, "error", {
+        plan: creds.subscriptionType,
+        message: `Couldn't refresh the Claude session (${refreshed.detail}). ${loginHint(account)}`,
+      }),
+    };
   }
-  return { token: creds.accessToken, plan: creds.subscriptionType };
+  if (force) return { token: creds.accessToken, plan: creds.subscriptionType };
+  return {
+    fail: snapshot(account, "error", {
+      plan: creds.subscriptionType,
+      message: `Claude session expired. ${loginHint(account)}`,
+    }),
+  };
 }
 
 export async function fetchClaude(account: ResolvedAccount): Promise<QuotaSnapshot> {
@@ -171,12 +314,21 @@ export async function fetchClaude(account: ResolvedAccount): Promise<QuotaSnapsh
     const resolved = await resolveToken(account);
     if ("fail" in resolved) return resolved.fail;
     const ua = await userAgent();
-    const h = headers(resolved.token, ua);
 
-    const [usage, profile] = await Promise.all([
-      fetchJson(USAGE_URL, { headers: h }),
-      account.email ? Promise.resolve(null) : fetchJson(PROFILE_URL, { headers: h }).catch(() => null),
-    ]);
+    let token = resolved.token;
+    let usage = await fetchJson(USAGE_URL, { headers: headers(token, ua) });
+    if (usage.status === 401 && account.kind !== "token") {
+      // Server says no — force a refresh once and retry.
+      const again = await resolveToken(account, true);
+      if (!("fail" in again) && again.token !== token) {
+        token = again.token;
+        usage = await fetchJson(USAGE_URL, { headers: headers(token, ua) });
+      }
+    }
+    const profile =
+      !account.email && usage.status === 200
+        ? await fetchJson(PROFILE_URL, { headers: headers(token, ua) }).catch(() => null)
+        : null;
 
     let email = account.email ?? null;
     if (profile && profile.status === 200 && isObject(profile.body) && isObject(profile.body.account)) {

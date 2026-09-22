@@ -1,9 +1,12 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { normalizeCodexRateLimits } from "../src/adapters/codex.ts";
-import { normalizeClaudeUsage } from "../src/adapters/claude.ts";
+import { mergeRefreshedCreds, normalizeClaudeUsage } from "../src/adapters/claude.ts";
 import { normalizeCursorUsage, normalizeGrokBotUsage, planFromCursorPlanInfo, tokenFromAuthJson } from "../src/adapters/cursor.ts";
 import { normalizeAntigravityQuota, parseAgyKeyringBlob, planFromCodeAssist } from "../src/adapters/antigravity.ts";
-import { normalizeGrokCredits, planFromGrokSettings, sessionFromAuthJson } from "../src/adapters/grok.ts";
+import { normalizeGrokCredits, persistGrokSession, planFromGrokSettings, sessionFromAuthJson } from "../src/adapters/grok.ts";
 import { normalizeOpenCodeUsage } from "../src/adapters/opencode.ts";
 import { normalizeDevinUserStatus, parseDevinCredentialsToml } from "../src/adapters/devin.ts";
 import { normalizeCommandCodeQuota, planFromCommandCodeSub } from "../src/adapters/commandcode.ts";
@@ -52,6 +55,33 @@ describe("claude", () => {
   test("returns nothing for unknown shapes", () => {
     expect(normalizeClaudeUsage({ hello: 1 })).toEqual([]);
     expect(normalizeClaudeUsage("nope")).toEqual([]);
+  });
+
+  test("mergeRefreshedCreds only writes when the store still holds the consumed refresh token", () => {
+    const prev = { accessToken: "old-at", refreshToken: "old-rt", expiresAt: 0, refreshTokenExpiresAt: null, subscriptionType: "pro" };
+    const next = { accessToken: "new-at", refreshToken: "new-rt", expiresAt: 123, refreshTokenExpiresAt: 456 };
+    const merged = mergeRefreshedCreds(
+      { claudeAiOauth: { accessToken: "old-at", refreshToken: "old-rt", expiresAt: 0, scopes: ["user:profile"] } },
+      prev,
+      next,
+    );
+    expect(merged?.claudeAiOauth).toMatchObject({
+      accessToken: "new-at",
+      refreshToken: "new-rt",
+      expiresAt: 123,
+      refreshTokenExpiresAt: 456,
+      scopes: ["user:profile"],
+    });
+    // Claude refreshed itself in the meantime — leave its tokens alone.
+    expect(mergeRefreshedCreds({ claudeAiOauth: { accessToken: "x", refreshToken: "other-rt" } }, prev, next)).toBeNull();
+    expect(mergeRefreshedCreds({ nope: 1 }, prev, next)).toBeNull();
+    // No new refresh-token expiry → drop the stale one instead of keeping a past date.
+    const noRtExp = mergeRefreshedCreds(
+      { claudeAiOauth: { accessToken: "old-at", refreshToken: "old-rt", refreshTokenExpiresAt: 1 } },
+      prev,
+      { ...next, refreshTokenExpiresAt: null },
+    );
+    expect(noRtExp?.claudeAiOauth).not.toHaveProperty("refreshTokenExpiresAt");
   });
 });
 
@@ -207,6 +237,37 @@ describe("grok", () => {
     });
     expect(session).toMatchObject({ accessToken: "access-token", email: "dev@example.com", authMode: "oidc" });
     expect(sessionFromAuthJson({ auth_mode: "oidc" })).toBeNull();
+  });
+
+  test("persistGrokSession writes refreshed tokens back, and skips a file that moved on", () => {
+    const file = join(mkdtempSync(join(tmpdir(), "ju-grok-")), "auth.json");
+    writeFileSync(
+      file,
+      JSON.stringify({
+        "https://auth.x.ai::client": {
+          key: "old-at",
+          refresh_token: "old-rt",
+          auth_mode: "oidc",
+          expires_at: "2020-01-01T00:00:00.000Z",
+        },
+      }),
+    );
+    process.env.GROK_AUTH_FILE = file;
+    try {
+      const prev = { accessToken: "old-at", refreshToken: "old-rt", clientId: "c", email: null, expiresAt: 1, authMode: "oidc" };
+      persistGrokSession(prev, { ...prev, accessToken: "new-at", refreshToken: "new-rt", expiresAt: 1789662148158 });
+      const written = JSON.parse(readFileSync(file, "utf8"))["https://auth.x.ai::client"];
+      expect(written).toMatchObject({ key: "new-at", refresh_token: "new-rt", expires_at: "2026-09-17T16:22:28.158Z" });
+
+      // The file was since refreshed by grok itself — a stale write must not clobber it.
+      persistGrokSession(
+        { ...prev, accessToken: "stale-at", refreshToken: "stale-rt" },
+        { ...prev, accessToken: "clobber", refreshToken: "clobber", expiresAt: 1 },
+      );
+      expect(JSON.parse(readFileSync(file, "utf8"))["https://auth.x.ai::client"].key).toBe("new-at");
+    } finally {
+      delete process.env.GROK_AUTH_FILE;
+    }
   });
 });
 

@@ -57,10 +57,20 @@ export function formatPercent(used: number | null): string {
   return Number.isInteger(tenth) ? `${tenth}%` : `${tenth.toFixed(1)}%`;
 }
 
-/** First letter of each word, for plan names like plus / go / pro. */
+/** Fused plan slugs that need word splits — codex reports "prolite" as one word. */
+const PLAN_WORDS: Record<string, string> = {
+  prolite: "Pro Lite",
+};
+
+/** Title-cases plan names; splits camelCase and "_" / "-" separators, plus known fused slugs. */
 export function formatPlan(plan: string | null | undefined): string | null {
   if (!plan || !plan.trim()) return null;
-  return plan.replace(/\S+/g, (w) => w.charAt(0).toUpperCase() + w.slice(1));
+  const words = plan
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .split(/[\s_-]+/)
+    .filter(Boolean)
+    .map((w) => PLAN_WORDS[w.toLowerCase()] ?? w.charAt(0).toUpperCase() + w.slice(1));
+  return words.join(" ") || null;
 }
 
 export function windowLabel(minutes: number | null): string {
