@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.0.12
+
+## What's Changed
+Refresh Claude usage every ten minutes and skip manual checks in [#6a282ff](https://github.com/spheceo/just-usage/commit/6a282ff31214fcc18fffe1e4ab07c1f845f62189)
+
 ## v0.0.11
 
 ## What's Changed
