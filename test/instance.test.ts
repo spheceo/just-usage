@@ -2,7 +2,8 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
+import { createServer } from "node:http";
 import {
   fetchHealth,
   formatStopResults,
@@ -77,10 +78,9 @@ describe("just-usage stop", () => {
     rmSync(home, { recursive: true, force: true });
   });
 
-  test("stops a spawned server on a dedicated port", async () => {
-    const child = spawn("bun", ["run", "src/cli.ts", "serve", "--port", String(port), "--host", "127.0.0.1"], {
-      cwd: join(import.meta.dir, ".."),
-      env: { ...process.env, JUST_USAGE_HOME: home, JUST_USAGE_LOG_DIR: join(home, "logs") },
+  test("stops a confirmed server on a dedicated port", async () => {
+    const script = `const http = require("node:http"); http.createServer((req, res) => { res.setHeader("Content-Type", "application/json"); res.end(JSON.stringify({ ok: true, name: "just-usage", version: "test", pid: process.pid })); }).listen(${port}, "127.0.0.1");`;
+    const child = spawn("node", ["-e", script], {
       stdio: "ignore",
     });
     const deadline = Date.now() + 12_000;
@@ -104,4 +104,39 @@ describe("just-usage stop", () => {
     expect(await fetchHealth(port)).toBeNull();
     child.kill("SIGKILL");
   }, 20_000);
+
+  test("serve rejects an alternate port", () => {
+    const result = spawnSync("bun", ["run", "src/cli.ts", "serve", "--port", "5758"], {
+      cwd: join(import.meta.dir, ".."),
+      env: { ...process.env, JUST_USAGE_HOME: home, JUST_USAGE_LOG_DIR: join(home, "logs") },
+      encoding: "utf8",
+      timeout: 10_000,
+    });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("serves only on port 5757");
+  });
+
+  test("serve refuses an occupied default port even with a different host", async () => {
+    const blocker = createServer();
+    const listening = await new Promise<boolean>((resolve, reject) => {
+      blocker.once("error", (error: NodeJS.ErrnoException) => {
+        if (error.code === "EADDRINUSE") resolve(false);
+        else reject(error);
+      });
+      blocker.listen(5757, "127.0.0.1", () => resolve(true));
+    });
+    try {
+      const result = spawnSync("bun", ["run", "src/cli.ts", "serve", "--host", "127.0.0.1"], {
+        cwd: join(import.meta.dir, ".."),
+        env: { ...process.env, JUST_USAGE_HOME: home, JUST_USAGE_LOG_DIR: join(home, "logs") },
+        encoding: "utf8",
+        timeout: 10_000,
+      });
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain("Port 5757 is already in use");
+      expect(result.stdout).not.toContain("serving on");
+    } finally {
+      if (listening) await new Promise<void>((resolve) => blocker.close(() => resolve()));
+    }
+  });
 });
