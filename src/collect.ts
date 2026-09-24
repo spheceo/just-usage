@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { formatHostname } from "./format.ts";
 import { fetchSnapshot } from "./adapters/index.ts";
 import { snapshot } from "./adapters/common.ts";
-import { FETCH_TIMEOUT_MS, VERSION } from "./config.ts";
+import { CLAUDE_REFRESH_INTERVAL_MS, FETCH_TIMEOUT_MS, VERSION } from "./config.ts";
 import { log } from "./log.ts";
 import { binVersion, clearBinCache, which, withTimeout } from "./proc.ts";
 import { listAccounts } from "./registry.ts";
@@ -123,14 +123,18 @@ export async function fetchAccount(account: ResolvedAccount): Promise<QuotaSnaps
   }
 }
 
-export async function collectReport(update: UpdateInfo | null, only?: ProviderId[]): Promise<UsageReport> {
+export async function collectReport(
+  update: UpdateInfo | null,
+  only?: ProviderId[],
+  fetcher: (account: ResolvedAccount) => Promise<QuotaSnapshot> = fetchAccount,
+): Promise<UsageReport> {
   const presence = await detectProviders();
   const providers = await Promise.all(
     PROVIDERS.filter((p) => !only || only.includes(p.id)).map(async (p): Promise<ProviderReport> => {
       const pres = presence.find((x) => x.id === p.id)!;
       const accounts = resolveAccounts(p.id, pres.installed);
       const [snapshots, version] = await Promise.all([
-        Promise.all(accounts.map(fetchAccount)),
+        Promise.all(accounts.map(fetcher)),
         pres.installed ? binVersion((await which(p.bin)) ?? p.bin) : Promise.resolve(null),
       ]);
       return { id: p.id, name: p.name, installed: pres.installed, version, accounts: snapshots };
@@ -154,11 +158,44 @@ export async function collectReport(update: UpdateInfo | null, only?: ProviderId
   };
 }
 
+/** Keep Claude's last result, including 429s, until its next automatic check. */
+export class ClaudeRefreshGate {
+  private entries = new Map<string, { attemptedAt: number; snapshot: QuotaSnapshot }>();
+  constructor(
+    private readonly intervalMs = CLAUDE_REFRESH_INTERVAL_MS,
+    private readonly now: () => number = Date.now,
+  ) {}
+
+  async get(
+    account: ResolvedAccount,
+    fetcher: (account: ResolvedAccount) => Promise<QuotaSnapshot>,
+    skip: boolean,
+  ): Promise<QuotaSnapshot> {
+    const previous = this.entries.get(account.id);
+    if (previous && (skip || this.now() - previous.attemptedAt < this.intervalMs)) {
+      if (previous.snapshot.account.label === account.label) return previous.snapshot;
+      const updated = { ...previous.snapshot, account: { ...previous.snapshot.account, label: account.label } };
+      this.entries.set(account.id, { ...previous, snapshot: updated });
+      return updated;
+    }
+    if (skip) return snapshot(account, "unsupported", { message: "Claude usage will appear after the next automatic check." });
+    const attemptedAt = this.now();
+    const result = await fetcher(account);
+    this.entries.set(account.id, { attemptedAt, snapshot: result });
+    return result;
+  }
+
+  forget(accountId: string): void {
+    this.entries.delete(accountId);
+  }
+}
+
 /** Memoizes the last report and de-duplicates concurrent refreshes. */
 export class ReportCache {
   private report: UsageReport | null = null;
   private inflight: Promise<UsageReport> | null = null;
   private timer: ReturnType<typeof setInterval> | null = null;
+  private claude = new ClaudeRefreshGate();
   constructor(
     private readonly ttlMs: number,
     private readonly getUpdate: () => UpdateInfo | null,
@@ -183,12 +220,13 @@ export class ReportCache {
     log("info", "quotas.refresh.stop");
   }
 
-  get(force = false): Promise<UsageReport> {
+  get(force = false, skipClaude = false): Promise<UsageReport> {
     const cached = this.report ? { ...this.report, update: this.getUpdate() } : null;
     const fresh = cached && Date.now() - Date.parse(cached.fetchedAt) < this.ttlMs;
     if (!force && fresh) return Promise.resolve(cached);
     if (this.inflight) return cached && !force ? Promise.resolve(cached) : this.inflight;
-    this.inflight = collectReport(this.getUpdate())
+    this.inflight = collectReport(this.getUpdate(), undefined, (account) =>
+      account.provider === "claude" ? this.claude.get(account, fetchAccount, skipClaude) : fetchAccount(account))
       .then((r) => {
         this.report = r;
         return r;
@@ -207,5 +245,9 @@ export class ReportCache {
 
   invalidate() {
     this.report = null;
+  }
+
+  forgetClaudeAccount(accountId: string) {
+    this.claude.forget(accountId);
   }
 }

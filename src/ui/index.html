@@ -162,7 +162,8 @@
   .seg label { text-align: center; font-size: 11px; padding: 3px 8px; color: var(--muted); cursor: pointer; }
   .seg input { appearance: none; position: absolute; }
   .seg label:has(input:checked) { background: #121212; color: var(--fg); }
-  .opts-actions { display: flex; justify-content: flex-end; align-items: center; gap: 12px; padding-top: 2px; }
+  .opts-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; padding-top: 2px; }
+  .opts-refresh-note { align-self: stretch; color: var(--dim); font-size: 11px; line-height: 1.4; }
   .opts-link { background: none; border: none; color: var(--muted); font: inherit; font-size: 12px; cursor: pointer; padding: 0; }
   .opts-link:hover { color: var(--fg); }
   .opts-link[hidden] { display: none; }
@@ -265,6 +266,7 @@
       </label>
     </div>
     <div class="opts-actions">
+      <span class="opts-refresh-note">Claude updates automatically every 10 minutes. Refresh data skips Claude.</span>
       <button class="refresh" id="refresh" type="button">Refresh data</button>
     </div>
   </div>
@@ -1088,7 +1090,7 @@
     loading = true;
     render();
     try {
-      const res = await fetch(`/api/quotas${force ? "?refresh=1" : ""}`, { cache: "no-store" });
+      const res = await fetch(`/api/quotas${force ? `?refresh=1${manual ? "&skipClaude=1" : ""}` : ""}`, { cache: "no-store" });
       adoptReport(await res.json());
     } catch (e) {
       if (!report) $("panel").innerHTML = `<div class="empty">Couldn't reach just-usage. Is the server still running?</div>`;

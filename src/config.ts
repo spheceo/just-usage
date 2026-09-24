@@ -10,6 +10,8 @@ export const DEFAULT_PORT = 5757;
 export const DEFAULT_HOST = "0.0.0.0";
 /** How often the running server re-fetches quotas, even with no browser open. */
 export const REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+/** Claude's usage endpoint is more restrictive than the other providers. */
+export const CLAUDE_REFRESH_INTERVAL_MS = 10 * 60 * 1000;
 /** Snapshots newer than this are served from cache unless the user hits Refresh. */
 export const CACHE_TTL_MS = REFRESH_INTERVAL_MS;
 /** Per-account fetch budget. */

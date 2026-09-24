@@ -143,7 +143,8 @@ export async function startServer(opts: ServerOptions): Promise<{ close: () => v
       }
       if (url.pathname === "/api/quotas" && (method === "GET" || method === "HEAD")) {
         const force = url.searchParams.get("refresh") === "1";
-        json(res, 200, await cache.get(force));
+        const skipClaude = force && url.searchParams.get("skipClaude") === "1";
+        json(res, 200, await cache.get(force, skipClaude));
         return;
       }
       if (url.pathname === "/api/health" && (method === "GET" || method === "HEAD")) {
@@ -220,7 +221,9 @@ export async function startServer(opts: ServerOptions): Promise<{ close: () => v
         return;
       }
       if (remove && method === "DELETE") {
-        json(res, 200, { account: await mutated(() => removeExtraAccount(decodeURIComponent(remove[1]!))) });
+        const account = await mutated(() => removeExtraAccount(decodeURIComponent(remove[1]!)));
+        if (account.provider === "claude") cache.forgetClaudeAccount(account.id);
+        json(res, 200, { account });
         return;
       }
       if (method !== "GET" && method !== "HEAD" && method !== "POST" && method !== "DELETE" && method !== "PATCH") {
