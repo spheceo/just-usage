@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.0.11
+
+## What's Changed
+Keep just-usage on the default port in [#9a7ed86](https://github.com/spheceo/just-usage/commit/9a7ed867938b35b91fd7a4db2bb511930b7aa389)
+
 ## v0.0.10
 
 ## What's Changed
