@@ -52,6 +52,40 @@ describe("claude", () => {
     expect(w[1]).toMatchObject({ label: "weekly all Usage", usedPercent: 88 });
   });
 
+  test("keeps Fable's scoped weekly limit alongside legacy buckets without duplicating them", () => {
+    const w = normalizeClaudeUsage({
+      ...claudeUsage,
+      limits: [
+        { kind: "session", percent: 6, resets_at: "2026-04-08T18:59:59Z" },
+        { kind: "weekly_all", percent: 35, resets_at: "2026-04-14T16:59:59Z" },
+        { kind: "weekly_scoped", percent: 68, resets_at: "2026-04-14T16:59:59Z", scope: { model: { display_name: "Fable" } } },
+        { kind: "weekly_scoped", percent: 12, scope: { model: { display_name: "Opus" } } },
+      ],
+    });
+    expect(w.map((x) => x.id)).toEqual(["five_hour", "seven_day", "seven_day_opus", "seven_day_fable", "extra_usage"]);
+    expect(w[3]).toEqual({ id: "seven_day_fable", label: "Weekly · Fable Usage", usedPercent: 68,
+      resetsAt: "2026-04-14T16:59:59.000Z", windowMinutes: 10080, kind: "rolling" });
+  });
+
+  test("supports limits-only payloads, zero usage and multiple scoped models", () => {
+    const w = normalizeClaudeUsage({ limits: [
+      { kind: "session", percent: 6 },
+      { kind: "weekly_all", percent: 35 },
+      { kind: "weekly_scoped", percent: 0, resets_at: null, scope: { model: { display_name: "Fable" } } },
+      { kind: "weekly_scoped", percent: 42, scope: { model: { display_name: "Haiku 5" } } },
+    ] });
+    expect(w.map((x) => x.id)).toEqual(["five_hour", "seven_day", "seven_day_fable", "seven_day_haiku_5"]);
+    expect(w[2]).toMatchObject({ usedPercent: 0, resetsAt: null, windowMinutes: 10080 });
+  });
+
+  test("skips malformed scoped limits and leaves accounts without them unchanged", () => {
+    expect(normalizeClaudeUsage({ ...claudeUsage, limits: [
+      null,
+      { kind: "weekly_scoped", percent: "invalid", scope: { model: { display_name: "Fable" } } },
+      { kind: "weekly_scoped", percent: 10, scope: { model: { display_name: " " } } },
+    ] })).toEqual(normalizeClaudeUsage(claudeUsage));
+  });
+
   test("returns nothing for unknown shapes", () => {
     expect(normalizeClaudeUsage({ hello: 1 })).toEqual([]);
     expect(normalizeClaudeUsage("nope")).toEqual([]);

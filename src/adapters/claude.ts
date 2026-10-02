@@ -227,10 +227,29 @@ export function normalizeClaudeUsage(body: unknown): QuotaWindow[] {
   push(bucket(body.seven_day_sonnet, "seven_day_sonnet", "Weekly · Sonnet Usage", 10080));
   push(bucket(body.seven_day_oauth_apps, "seven_day_oauth_apps", "Weekly · OAuth apps Usage", 10080));
 
-  // Newer payloads may carry a `limits` array; only consult it when the legacy buckets are missing.
-  if (out.length === 0 && Array.isArray(body.limits)) {
+  // Model-scoped weekly limits (including Fable) live only in limits[], even
+  // when the response also contains the legacy session and weekly buckets.
+  const hasLegacyBuckets = out.length > 0;
+  if (Array.isArray(body.limits)) {
     for (const [i, item] of body.limits.entries()) {
       if (!isObject(item)) continue;
+      if (item.kind === "weekly_scoped" && isObject(item.scope) && isObject(item.scope.model)) {
+        const model = item.scope.model.display_name;
+        if (typeof model !== "string" || !model.trim()) continue;
+        const name = model.trim();
+        const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+        const id = `seven_day_${slug || i}`;
+        const window = bucket({ utilization: item.percent, resets_at: item.resets_at }, id, `Weekly · ${name} Usage`, 10080);
+        if (window && !out.some((w) => w.id === id)) push(window);
+        continue;
+      }
+      if (hasLegacyBuckets) continue;
+      if (item.kind === "session" || item.kind === "weekly_all") {
+        const session = item.kind === "session";
+        push(bucket({ utilization: item.percent, resets_at: item.resets_at }, session ? "five_hour" : "seven_day",
+          session ? "5h Usage" : "Weekly Usage", session ? 300 : 10080));
+        continue;
+      }
       const name = [item.name, item.type, item.id].find((x): x is string => typeof x === "string" && x.length > 0) ?? `limit ${i + 1}`;
       const label = name.replace(/_/g, " ");
       push(bucket(item, `limits:${name}`, /usage$/i.test(label) ? label : `${label} Usage`, null));
