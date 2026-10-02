@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.0.13
+
+## What's Changed
+Show Claude Fable weekly usage alongside standard limits in [#5dda2f8](https://github.com/spheceo/just-usage/commit/5dda2f8327453e1cba2126214cb68c8bea1544f6)
+
 ## v0.0.12
 
 ## What's Changed
