@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.0.14
+
+## What's Changed
+Reap codex app-servers after each fetch and on shutdown in [#f79c334](https://github.com/spheceo/just-usage/commit/f79c334c03954df77da06291de624f74c0ad05e4)
+
 ## v0.0.13
 
 ## What's Changed
