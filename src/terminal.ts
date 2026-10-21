@@ -43,6 +43,7 @@ function renderAccount(a: QuotaSnapshot, now: number): string[] {
   if (a.resetCredits && a.resetCredits.availableCount > 0) {
     lines.push(`    ${c.dim(`${a.resetCredits.availableCount} rate-limit reset(s) banked`)}`);
   }
+  if (a.stale) lines.push(`    ${c.dim(`stale since ${a.fetchedAt}  ${a.stale.message}`)}`);
   return lines;
 }
 

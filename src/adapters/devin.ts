@@ -17,7 +17,7 @@ import { join } from "node:path";
 import { clampPercent, epochToIso, isoOrNull } from "../format.ts";
 import { binVersion } from "../proc.ts";
 import type { QuotaSnapshot, QuotaWindow, ResolvedAccount } from "../types.ts";
-import { errorMessage, fetchJson, isObject, snapshot, type JsonObject } from "./common.ts";
+import { errorMessage, fetchJson, isObject, retryableStatus, snapshot, type JsonObject } from "./common.ts";
 
 const DEFAULT_API_SERVER = "https://server.codeium.com";
 const USER_STATUS_PATH = "/exa.seat_management_pb.SeatManagementService/GetUserStatus";
@@ -228,7 +228,7 @@ export async function fetchDevin(account: ResolvedAccount): Promise<QuotaSnapsho
       return snapshot(account, "error", { email, plan, message: `Devin rejected the session (${res.status}). Run \`devin auth login\`.` });
     }
     if (res.status !== 200 || !norm) {
-      return snapshot(account, "error", { email, plan, message: `Usage endpoint returned HTTP ${res.status}.` });
+      return snapshot(account, "error", { email, plan, message: `Usage endpoint returned HTTP ${res.status}.`, transient: retryableStatus(res.status) });
     }
     if (norm.windows.length === 0) {
       return snapshot(account, "unsupported", {
@@ -239,6 +239,6 @@ export async function fetchDevin(account: ResolvedAccount): Promise<QuotaSnapsho
     }
     return snapshot(account, "ok", { email, plan, windows: norm.windows });
   } catch (e) {
-    return snapshot(account, "error", { message: errorMessage(e) });
+    return snapshot(account, "error", { message: errorMessage(e), transient: true });
   }
 }

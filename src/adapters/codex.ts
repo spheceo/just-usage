@@ -258,7 +258,7 @@ export async function fetchCodex(account: ResolvedAccount, opts: CodexFetchOptio
       resetCredits: norm.resetCredits,
     });
   } catch (e) {
-    return snapshot(account, "error", { message: errorMessage(e) });
+    return snapshot(account, "error", { message: errorMessage(e), transient: true });
   } finally {
     clearTimeout(deadline);
     await client?.close();

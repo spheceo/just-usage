@@ -19,7 +19,7 @@ import { log } from "../log.ts";
 import { binVersion, run } from "../proc.ts";
 import { secretStore } from "../secrets.ts";
 import type { QuotaSnapshot, QuotaWindow, ResolvedAccount } from "../types.ts";
-import { errorMessage, fetchJson, isObject, snapshot, type JsonObject } from "./common.ts";
+import { errorMessage, fetchJson, isObject, parseRetryAfter, retryableStatus, snapshot, type JsonObject } from "./common.ts";
 
 const USAGE_URL = "https://api.anthropic.com/api/oauth/usage";
 const PROFILE_URL = "https://api.anthropic.com/api/oauth/profile";
@@ -76,6 +76,8 @@ export async function readClaudeCredentials(
   if (process.platform === "darwin") {
     const service = keychainService(configDir);
     const res = await run("security", ["find-generic-password", "-s", service, "-w"], { timeoutMs: 20_000 });
+    // No exit code means `security` hung or failed to start — not that the user signed out.
+    if (res.code === null) throw new Error("Timed out reading Claude credentials from the Keychain.");
     if (res.code === 0) {
       const raw = res.stdout.trim();
       const creds = parseCreds(raw);
@@ -359,10 +361,16 @@ export async function fetchClaude(account: ResolvedAccount): Promise<QuotaSnapsh
       return snapshot(account, "error", { email, plan: resolved.plan, message: "Token rejected (401). Sign in again." });
     }
     if (usage.status === 429) {
-      return snapshot(account, "error", { email, plan: resolved.plan, message: "Rate limited by Anthropic (429). Try again in a minute." });
+      return snapshot(account, "error", {
+        email,
+        plan: resolved.plan,
+        message: "Rate limited by Anthropic (429). Retrying automatically.",
+        transient: true,
+        rateLimit: { retryAfterMs: parseRetryAfter(usage.headers.get("retry-after")) },
+      });
     }
     if (usage.status !== 200) {
-      return snapshot(account, "error", { email, plan: resolved.plan, message: `Usage endpoint returned HTTP ${usage.status}.` });
+      return snapshot(account, "error", { email, plan: resolved.plan, message: `Usage endpoint returned HTTP ${usage.status}.`, transient: retryableStatus(usage.status) });
     }
     const windows = normalizeClaudeUsage(usage.body);
     if (windows.length === 0) {
@@ -370,7 +378,7 @@ export async function fetchClaude(account: ResolvedAccount): Promise<QuotaSnapsh
     }
     return snapshot(account, "ok", { email, plan: resolved.plan, windows });
   } catch (e) {
-    return snapshot(account, "error", { message: errorMessage(e) });
+    return snapshot(account, "error", { message: errorMessage(e), transient: true });
   }
 }
 

@@ -14,7 +14,7 @@ import { join } from "node:path";
 import { clampPercent, epochToIso, isoOrNull } from "../format.ts";
 import { run } from "../proc.ts";
 import type { QuotaSnapshot, QuotaWindow, ResolvedAccount } from "../types.ts";
-import { errorMessage, fetchJson, isObject, snapshot, type JsonObject } from "./common.ts";
+import { errorMessage, fetchJson, isObject, retryableStatus, snapshot, type JsonObject } from "./common.ts";
 
 const USAGE_URL = "https://api2.cursor.sh/aiserver.v1.DashboardService/GetCurrentPeriodUsage";
 const GROK_BOT_URL = "https://api2.cursor.sh/aiserver.v1.DashboardService/GetSandUsageStatus";
@@ -207,7 +207,7 @@ export async function fetchCursor(account: ResolvedAccount): Promise<QuotaSnapsh
       return snapshot(account, "error", { email, message: `Cursor rejected the session (${res.status}). Run \`cursor-agent login\`.` });
     }
     if (res.status !== 200) {
-      return snapshot(account, "error", { email, message: `Cursor usage endpoint returned HTTP ${res.status}.` });
+      return snapshot(account, "error", { email, message: `Cursor usage endpoint returned HTTP ${res.status}.`, transient: retryableStatus(res.status) });
     }
     let windows = normalizeCursorUsage(res.body);
     if (!windows) {
@@ -221,6 +221,6 @@ export async function fetchCursor(account: ResolvedAccount): Promise<QuotaSnapsh
     const plan = planRes?.status === 200 ? planFromCursorPlanInfo(planRes.body) : null;
     return snapshot(account, "ok", { email, plan, windows });
   } catch (e) {
-    return snapshot(account, "error", { message: errorMessage(e) });
+    return snapshot(account, "error", { message: errorMessage(e), transient: true });
   }
 }

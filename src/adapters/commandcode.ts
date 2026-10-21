@@ -18,7 +18,7 @@ import { join } from "node:path";
 import { clampPercent, epochToIso, isoOrNull } from "../format.ts";
 import { secretStore } from "../secrets.ts";
 import type { QuotaSnapshot, QuotaWindow, ResolvedAccount } from "../types.ts";
-import { errorMessage, fetchJson, isObject, snapshot, type JsonObject } from "./common.ts";
+import { errorMessage, fetchJson, isObject, retryableStatus, snapshot, type JsonObject } from "./common.ts";
 
 const API_BASE = "https://api.commandcode.ai";
 const LOGIN_CMD = process.platform === "win32" ? "cmdc login" : "cmd login";
@@ -190,7 +190,7 @@ export async function fetchCommandCode(account: ResolvedAccount): Promise<QuotaS
       return snapshot(account, "error", { message: `Command Code rejected the key (${whoami.status}). Run \`${LOGIN_CMD}\`.` });
     }
     if (whoami.status !== 200 || !isObject(whoami.body)) {
-      return snapshot(account, "error", { message: `Usage endpoint returned HTTP ${whoami.status}.` });
+      return snapshot(account, "error", { message: `Usage endpoint returned HTTP ${whoami.status}.`, transient: retryableStatus(whoami.status) });
     }
     const user = isObject(whoami.body.user) ? whoami.body.user : null;
     const email = typeof user?.email === "string" && user.email.trim() ? user.email.trim() : account.email ?? null;
@@ -211,7 +211,7 @@ export async function fetchCommandCode(account: ResolvedAccount): Promise<QuotaS
       return snapshot(account, "error", { email, message: `Command Code rejected the key (${credits.status}). Run \`${LOGIN_CMD}\`.` });
     }
     if (credits.status !== 200) {
-      return snapshot(account, "error", { email, message: `Usage endpoint returned HTTP ${credits.status}.` });
+      return snapshot(account, "error", { email, message: `Usage endpoint returned HTTP ${credits.status}.`, transient: retryableStatus(credits.status) });
     }
 
     const subBody = subscription && subscription.status === 200 && isObject(subscription.body) && isObject(subscription.body.data)
@@ -234,7 +234,7 @@ export async function fetchCommandCode(account: ResolvedAccount): Promise<QuotaS
     }
     return snapshot(account, "ok", { email, plan: norm.plan, windows: norm.windows });
   } catch (e) {
-    return snapshot(account, "error", { message: errorMessage(e) });
+    return snapshot(account, "error", { message: errorMessage(e), transient: true });
   }
 }
 

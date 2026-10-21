@@ -13,7 +13,7 @@ import { join } from "node:path";
 import { clampPercent, isoOrNull } from "../format.ts";
 import { binVersion } from "../proc.ts";
 import type { QuotaSnapshot, QuotaWindow, ResolvedAccount } from "../types.ts";
-import { errorMessage, fetchJson, isObject, snapshot, type JsonObject } from "./common.ts";
+import { errorMessage, fetchJson, isObject, retryableStatus, snapshot, type JsonObject } from "./common.ts";
 
 const DEFAULT_PROXY = "https://cli-chat-proxy.grok.com/v1";
 const TOKEN_URL = "https://auth.x.ai/oauth2/token";
@@ -271,7 +271,7 @@ export async function fetchGrok(account: ResolvedAccount): Promise<QuotaSnapshot
       return snapshot(account, "error", { email, plan, message: `Grok rejected the session (${credits.status}). Run \`grok login --oauth\`.` });
     }
     if (credits.status !== 200) {
-      return snapshot(account, "error", { email, plan, message: `Usage endpoint returned HTTP ${credits.status}.` });
+      return snapshot(account, "error", { email, plan, message: `Usage endpoint returned HTTP ${credits.status}.`, transient: retryableStatus(credits.status) });
     }
     const windows = normalizeGrokCredits(credits.body);
     if (windows.length === 0) {
@@ -283,6 +283,6 @@ export async function fetchGrok(account: ResolvedAccount): Promise<QuotaSnapshot
     }
     return snapshot(account, "ok", { email, plan, windows });
   } catch (e) {
-    return snapshot(account, "error", { message: errorMessage(e) });
+    return snapshot(account, "error", { message: errorMessage(e), transient: true });
   }
 }

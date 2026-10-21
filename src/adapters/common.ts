@@ -36,10 +36,24 @@ export function isObject(v: unknown): v is JsonObject {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
+/** HTTP statuses worth retrying later rather than reporting as a broken account. */
+export function retryableStatus(status: number): boolean {
+  return status === 408 || status === 429 || status >= 500;
+}
+
+/** `Retry-After` as milliseconds (delta-seconds or HTTP date), or null. */
+export function parseRetryAfter(value: string | null, now = Date.now()): number | null {
+  if (!value) return null;
+  const v = value.trim();
+  if (/^\d+$/.test(v)) return Number(v) * 1000;
+  const at = Date.parse(v);
+  return Number.isFinite(at) ? Math.max(0, at - now) : null;
+}
+
 export async function fetchJson(
   url: string,
   init: RequestInit & { timeoutMs?: number } = {},
-): Promise<{ status: number; body: unknown; text: string }> {
+): Promise<{ status: number; body: unknown; text: string; headers: Headers }> {
   const { timeoutMs = 15_000, ...rest } = init;
   const res = await fetch(url, { ...rest, signal: AbortSignal.timeout(timeoutMs) });
   const text = await res.text();
@@ -49,5 +63,5 @@ export async function fetchJson(
   } catch {
     body = null;
   }
-  return { status: res.status, body, text };
+  return { status: res.status, body, text, headers: res.headers };
 }

@@ -15,7 +15,7 @@ export const CLAUDE_REFRESH_INTERVAL_MS = 10 * 60 * 1000;
 /** Snapshots newer than this are served from cache unless the user hits Refresh. */
 export const CACHE_TTL_MS = REFRESH_INTERVAL_MS;
 /** Per-account fetch budget. */
-export const FETCH_TIMEOUT_MS = 20_000;
+export const FETCH_TIMEOUT_MS = 30_000;
 
 export function configDir(): string {
   const override = process.env.JUST_USAGE_HOME;

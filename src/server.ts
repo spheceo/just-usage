@@ -222,7 +222,7 @@ export async function startServer(opts: ServerOptions): Promise<{ close: () => v
       }
       if (remove && method === "DELETE") {
         const account = await mutated(() => removeExtraAccount(decodeURIComponent(remove[1]!)));
-        if (account.provider === "claude") cache.forgetClaudeAccount(account.id);
+        cache.forgetAccount(account.id);
         json(res, 200, { account });
         return;
       }

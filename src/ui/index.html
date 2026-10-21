@@ -549,6 +549,7 @@
       for (const w of a.windows) { const s = sev(w.usedPercent); if (s && (!worst || rank[s] > rank[worst])) worst = s; }
       if (worst === "crit") badge = `<span class="badge crit">critical</span>`;
       else if (worst === "warn") badge = `<span class="badge warn">running low</span>`;
+      else if (a.stale) badge = `<span class="badge">stale</span>`;
     } else {
       const text = { signed_out: "signed out", unsupported: "Unsupported", error: "error" }[a.status] || a.status;
       badge = `<span class="badge">${esc(text)}</span>`;
@@ -556,6 +557,7 @@
     let body = "";
     if (a.status === "ok") {
       body = renderWindows(a.windows);
+      if (a.stale) body += `<div class="msg">From ${esc(fmtAgo(a.fetchedAt))} · ${rich(a.stale.message)}</div>`;
       if (a.resetCredits && a.resetCredits.availableCount > 0) {
         const n = a.resetCredits.availableCount;
         const rows = (a.resetCredits.credits || [])

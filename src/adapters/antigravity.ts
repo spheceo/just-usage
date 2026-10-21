@@ -20,7 +20,7 @@ import { clampPercent, isoOrNull } from "../format.ts";
 import { binVersion, run } from "../proc.ts";
 import { secretStore } from "../secrets.ts";
 import type { QuotaSnapshot, QuotaWindow, ResolvedAccount } from "../types.ts";
-import { errorMessage, fetchJson, isObject, snapshot, type JsonObject } from "./common.ts";
+import { errorMessage, fetchJson, isObject, retryableStatus, snapshot, type JsonObject } from "./common.ts";
 
 export const AGY_CLIENT_ID = "1071006060591-tmhssin2h21lcre235vtolojh4g403ep.apps.googleusercontent.com";
 export const AGY_CLIENT_SECRET = "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";
@@ -376,7 +376,7 @@ export async function fetchAntigravity(account: ResolvedAccount): Promise<QuotaS
       });
     }
     if (usage.status !== 200) {
-      return snapshot(account, "error", { email, plan, message: `Usage endpoint returned HTTP ${usage.status}.` });
+      return snapshot(account, "error", { email, plan, message: `Usage endpoint returned HTTP ${usage.status}.`, transient: retryableStatus(usage.status) });
     }
     const windows = normalizeAntigravityQuota(usage.body);
     if (windows.length === 0) {
@@ -384,6 +384,6 @@ export async function fetchAntigravity(account: ResolvedAccount): Promise<QuotaS
     }
     return snapshot(account, "ok", { email, plan, windows });
   } catch (e) {
-    return snapshot(account, "error", { message: errorMessage(e) });
+    return snapshot(account, "error", { message: errorMessage(e), transient: true });
   }
 }

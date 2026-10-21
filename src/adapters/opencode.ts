@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { clampPercent, isoOrNull } from "../format.ts";
 import { secretStore } from "../secrets.ts";
 import type { QuotaSnapshot, QuotaWindow, ResolvedAccount } from "../types.ts";
-import { errorMessage, fetchJson, isObject, snapshot, type JsonObject } from "./common.ts";
+import { errorMessage, fetchJson, isObject, retryableStatus, snapshot, type JsonObject } from "./common.ts";
 
 const USAGE_URL = "https://opencode.ai/zen/go/v1/usage";
 
@@ -75,11 +75,11 @@ export async function fetchOpenCode(account: ResolvedAccount): Promise<QuotaSnap
     const { status, windows } = await fetchOpenCodeUsage(key);
     if (status === 401) return snapshot(account, "error", { message: "Key rejected (401)." });
     if (status === 403) return snapshot(account, "unsupported", { message: "No active OpenCode Go subscription." });
-    if (status === 429) return snapshot(account, "error", { message: "Rate limited (429). Try again shortly." });
-    if (status !== 200) return snapshot(account, "error", { message: `Usage endpoint returned HTTP ${status}.` });
+    if (status === 429) return snapshot(account, "error", { message: "Rate limited (429). Retrying automatically.", transient: true });
+    if (status !== 200) return snapshot(account, "error", { message: `Usage endpoint returned HTTP ${status}.`, transient: retryableStatus(status) });
     if (windows.length === 0) return snapshot(account, "unsupported", { message: "Usage response had no recognizable windows." });
     return snapshot(account, "ok", { plan: "go", windows });
   } catch (e) {
-    return snapshot(account, "error", { message: errorMessage(e) });
+    return snapshot(account, "error", { message: errorMessage(e), transient: true });
   }
 }

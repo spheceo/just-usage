@@ -112,7 +112,7 @@ export async function fetchAccount(account: ResolvedAccount): Promise<QuotaSnaps
     });
     return snap;
   } catch (e) {
-    const snap = snapshot(account, "error", { message: e instanceof Error ? e.message : String(e) });
+    const snap = snapshot(account, "error", { message: e instanceof Error ? e.message : String(e), transient: true });
     log("error", "quotas.fetch", {
       account: account.id,
       provider: account.provider,
@@ -158,9 +158,15 @@ export async function collectReport(
   };
 }
 
-/** Keep Claude's last result, including 429s, until its next automatic check. */
+/** Longest wait after repeated Claude 429s. */
+export const CLAUDE_MAX_BACKOFF_MS = 60 * 60 * 1000;
+
+/**
+ * Keep Claude's last result until its next automatic check. A 429 doubles the
+ * wait (20m, 40m, then 60m) and honours Retry-After when it is longer.
+ */
 export class ClaudeRefreshGate {
-  private entries = new Map<string, { attemptedAt: number; snapshot: QuotaSnapshot }>();
+  private entries = new Map<string, { nextAt: number; strikes: number; snapshot: QuotaSnapshot }>();
   constructor(
     private readonly intervalMs = CLAUDE_REFRESH_INTERVAL_MS,
     private readonly now: () => number = Date.now,
@@ -172,7 +178,7 @@ export class ClaudeRefreshGate {
     skip: boolean,
   ): Promise<QuotaSnapshot> {
     const previous = this.entries.get(account.id);
-    if (previous && (skip || this.now() - previous.attemptedAt < this.intervalMs)) {
+    if (previous && (skip || this.now() < previous.nextAt)) {
       if (previous.snapshot.account.label === account.label) return previous.snapshot;
       const updated = { ...previous.snapshot, account: { ...previous.snapshot.account, label: account.label } };
       this.entries.set(account.id, { ...previous, snapshot: updated });
@@ -181,8 +187,54 @@ export class ClaudeRefreshGate {
     if (skip) return snapshot(account, "unsupported", { message: "Claude usage will appear after the next automatic check." });
     const attemptedAt = this.now();
     const result = await fetcher(account);
-    this.entries.set(account.id, { attemptedAt, snapshot: result });
+    const strikes = result.rateLimit ? (previous?.strikes ?? 0) + 1 : 0;
+    let waitMs = this.intervalMs;
+    if (strikes > 0) {
+      waitMs = Math.min(CLAUDE_MAX_BACKOFF_MS, this.intervalMs * 2 ** strikes);
+      waitMs = Math.max(waitMs, result.rateLimit?.retryAfterMs ?? 0);
+      log("warn", "claude.backoff", { account: account.id, strikes, waitMs });
+    }
+    this.entries.set(account.id, { nextAt: attemptedAt + waitMs, strikes, snapshot: result });
     return result;
+  }
+
+  forget(accountId: string): void {
+    this.entries.delete(accountId);
+  }
+}
+
+/** How long a last good result may stand in for transient errors. */
+export const STALE_LIMIT_MS = 3 * 60 * 60 * 1000;
+
+/**
+ * Remembers each account's last ok snapshot and shows it, marked stale, in
+ * place of a transient error (timeout, 429, network, 5xx). Errors that need
+ * the user (expired session, rejected key) and sign-outs still come through.
+ */
+export class LastGoodCache {
+  private entries = new Map<string, QuotaSnapshot>();
+  constructor(
+    private readonly maxAgeMs = STALE_LIMIT_MS,
+    private readonly now: () => number = Date.now,
+  ) {}
+
+  apply(snap: QuotaSnapshot): QuotaSnapshot {
+    const id = snap.account.id;
+    if (snap.status === "ok") {
+      if (!snap.stale) this.entries.set(id, snap);
+      return snap;
+    }
+    const previous = this.entries.get(id);
+    if (snap.status !== "error" || !snap.transient) {
+      this.entries.delete(id);
+      return snap;
+    }
+    if (!previous || this.now() - Date.parse(previous.fetchedAt) > this.maxAgeMs) return snap;
+    return {
+      ...previous,
+      account: { ...previous.account, label: snap.account.label },
+      stale: { message: snap.message ?? "Refresh failed." },
+    };
   }
 
   forget(accountId: string): void {
@@ -196,6 +248,7 @@ export class ReportCache {
   private inflight: Promise<UsageReport> | null = null;
   private timer: ReturnType<typeof setInterval> | null = null;
   private claude = new ClaudeRefreshGate();
+  private lastGood = new LastGoodCache();
   constructor(
     private readonly ttlMs: number,
     private readonly getUpdate: () => UpdateInfo | null,
@@ -225,8 +278,10 @@ export class ReportCache {
     const fresh = cached && Date.now() - Date.parse(cached.fetchedAt) < this.ttlMs;
     if (!force && fresh) return Promise.resolve(cached);
     if (this.inflight) return cached && !force ? Promise.resolve(cached) : this.inflight;
-    this.inflight = collectReport(this.getUpdate(), undefined, (account) =>
-      account.provider === "claude" ? this.claude.get(account, fetchAccount, skipClaude) : fetchAccount(account))
+    this.inflight = collectReport(this.getUpdate(), undefined, async (account) =>
+      this.lastGood.apply(
+        account.provider === "claude" ? await this.claude.get(account, fetchAccount, skipClaude) : await fetchAccount(account),
+      ))
       .then((r) => {
         this.report = r;
         return r;
@@ -247,7 +302,8 @@ export class ReportCache {
     this.report = null;
   }
 
-  forgetClaudeAccount(accountId: string) {
+  forgetAccount(accountId: string) {
     this.claude.forget(accountId);
+    this.lastGood.forget(accountId);
   }
 }

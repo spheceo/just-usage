@@ -59,6 +59,12 @@ export interface QuotaSnapshot {
   windows: QuotaWindow[];
   resetCredits: { availableCount: number; credits: ResetCredit[] } | null;
   fetchedAt: string;
+  /** Error only: likely to clear on its own (timeout, rate limit, network, 5xx). */
+  transient?: boolean;
+  /** Error only: the provider rate-limited us; `retryAfterMs` is its Retry-After, if any. */
+  rateLimit?: { retryAfterMs: number | null };
+  /** An earlier ok result shown in place of a transient error. `fetchedAt` is when it was fetched. */
+  stale?: { message: string };
 }
 
 /** A persisted, user-added account. Default accounts are discovered, never stored. */
