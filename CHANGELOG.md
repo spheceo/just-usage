@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.0.15
+
+## What's Changed
+Keep last good quotas through timeouts and back off Claude 429s in [#c14db85](https://github.com/spheceo/just-usage/commit/c14db850ee9648a426370b5b20fb16b8d07a77e5)
+
 ## v0.0.14
 
 ## What's Changed
