@@ -11,6 +11,7 @@ import { openInBrowser, runInteractive, which } from "./proc.ts";
 import { getAccount, listAccounts, newAccountId, profileDirFor, saveAccount, updateAccount } from "./registry.ts";
 import { formatStopResults, pidsOnPort, stopServers } from "./instance.ts";
 import { startServer } from "./server.ts";
+import { installShutdown } from "./shutdown.ts";
 import { renderReport } from "./terminal.ts";
 import { PROVIDERS, providerName, type ProviderId, type UpdateInfo } from "./types.ts";
 import { checkForUpdate, detectPackageManager, runUpgrade } from "./update.ts";
@@ -178,12 +179,7 @@ async function cmdServe(argv: string[]) {
     console.log("Open one in your browser, or restart with `just-usage serve --open`.");
   }
 
-  const shutdown = () => {
-    server.close();
-    process.exit(0);
-  };
-  process.on("SIGINT", shutdown);
-  process.on("SIGTERM", shutdown);
+  installShutdown(() => server.close());
 }
 
 async function cmdStatus(argv: string[]) {

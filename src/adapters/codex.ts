@@ -3,50 +3,83 @@
  * Multi-account works by pointing CODEX_HOME at an isolated directory per account;
  * the app-server owns login, token storage and refresh. We never read auth.json.
  */
-import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
 import { createInterface } from "node:readline";
-import { VERSION } from "../config.ts";
+import { FETCH_TIMEOUT_MS, VERSION } from "../config.ts";
 import { clampPercent, epochToIso, windowLabel } from "../format.ts";
+import { spawnTracked, terminateTree } from "../proc.ts";
 import type { QuotaSnapshot, QuotaWindow, ResetCredit, ResolvedAccount } from "../types.ts";
 import { errorMessage, isObject, snapshot, type JsonObject } from "./common.ts";
 
 type Pending = { resolve: (v: unknown) => void; reject: (e: Error) => void; timer: NodeJS.Timeout };
 type Notification = { method: string; params: unknown };
 
+/** Leave the fetch a little headroom so our own deadline, not collect's, ends it. */
+const CODEX_FETCH_TIMEOUT_MS = FETCH_TIMEOUT_MS - 1000;
+
 export class AppServerClient {
   private nextId = 1;
   private pending = new Map<number, Pending>();
   private listeners = new Set<(n: Notification) => void>();
   private exited = false;
+  private closing: Promise<void> | null = null;
+  private readonly spawned: Promise<void>;
 
-  private constructor(private readonly proc: ChildProcessWithoutNullStreams) {
-    createInterface({ input: proc.stdout }).on("line", (line) => this.onLine(line));
-    proc.stderr.on("data", () => {});
-    proc.on("exit", () => {
-      this.exited = true;
-      for (const p of this.pending.values()) {
-        clearTimeout(p.timer);
-        p.reject(new Error("codex app-server exited"));
-      }
-      this.pending.clear();
-    });
-  }
-
-  static async start(codexHome?: string): Promise<AppServerClient> {
-    const env: NodeJS.ProcessEnv = { ...process.env };
-    if (codexHome) env.CODEX_HOME = codexHome;
-    const proc = spawn("codex", ["app-server"], { env, stdio: ["pipe", "pipe", "pipe"] });
-    await new Promise<void>((resolve, reject) => {
+  private constructor(
+    private readonly proc: ChildProcess,
+    private readonly killGraceMs: number,
+  ) {
+    this.spawned = new Promise<void>((resolve, reject) => {
       proc.once("spawn", () => resolve());
       proc.once("error", (e) => reject(new Error(`could not start codex app-server: ${e.message}`)));
     });
-    const client = new AppServerClient(proc);
-    await client.request("initialize", {
+    this.spawned.catch(() => {});
+    createInterface({ input: proc.stdout! }).on("line", (line) => this.onLine(line));
+    proc.stderr!.on("data", () => {});
+    proc.stdin!.on("error", () => {});
+    const gone = (reason: string) => {
+      this.exited = true;
+      this.failPending(reason);
+    };
+    proc.on("exit", () => gone("codex app-server exited"));
+    proc.on("error", () => gone("codex app-server failed to start"));
+  }
+
+  /** Spawn without waiting, so the caller owns the process from the first moment. */
+  static spawn(codexHome?: string, opts: { killGraceMs?: number } = {}): AppServerClient {
+    const env: NodeJS.ProcessEnv = { ...process.env };
+    if (codexHome) env.CODEX_HOME = codexHome;
+    const proc = spawnTracked("codex", ["app-server"], { env, stdio: ["pipe", "pipe", "pipe"] });
+    return new AppServerClient(proc, opts.killGraceMs ?? 1500);
+  }
+
+  /** Spawn and initialize. The process is torn down if initialization fails. */
+  static async start(codexHome?: string): Promise<AppServerClient> {
+    const client = AppServerClient.spawn(codexHome);
+    try {
+      await client.initialize();
+      return client;
+    } catch (e) {
+      await client.close();
+      throw e;
+    }
+  }
+
+  async initialize(): Promise<void> {
+    await this.spawned;
+    await this.request("initialize", {
       clientInfo: { name: "just-usage", title: "just-usage", version: VERSION },
       capabilities: {},
     });
-    client.notify("initialized", {});
-    return client;
+    this.notify("initialized", {});
+  }
+
+  private failPending(reason: string) {
+    for (const p of this.pending.values()) {
+      clearTimeout(p.timer);
+      p.reject(new Error(reason));
+    }
+    this.pending.clear();
   }
 
   private onLine(line: string) {
@@ -75,7 +108,7 @@ export class AppServerClient {
   }
 
   request<T = unknown>(method: string, params: unknown, timeoutMs = 20_000): Promise<T> {
-    if (this.exited) return Promise.reject(new Error("codex app-server exited"));
+    if (this.exited || this.closing) return Promise.reject(new Error("codex app-server exited"));
     const id = this.nextId++;
     return new Promise<T>((resolve, reject) => {
       const timer = setTimeout(() => {
@@ -83,12 +116,13 @@ export class AppServerClient {
         reject(new Error(`${method} timed out`));
       }, timeoutMs);
       this.pending.set(id, { resolve: resolve as (v: unknown) => void, reject, timer });
-      this.proc.stdin.write(JSON.stringify({ jsonrpc: "2.0", id, method, params }) + "\n");
+      this.proc.stdin!.write(JSON.stringify({ jsonrpc: "2.0", id, method, params }) + "\n");
     });
   }
 
   notify(method: string, params: unknown) {
-    this.proc.stdin.write(JSON.stringify({ jsonrpc: "2.0", method, params }) + "\n");
+    if (this.exited || this.closing) return;
+    this.proc.stdin!.write(JSON.stringify({ jsonrpc: "2.0", method, params }) + "\n");
   }
 
   onNotification(cb: (n: Notification) => void): () => void {
@@ -96,8 +130,14 @@ export class AppServerClient {
     return () => this.listeners.delete(cb);
   }
 
-  close() {
-    if (!this.exited) this.proc.kill();
+  /** Close stdin, then SIGTERM the process group and SIGKILL it if it lingers. Idempotent. */
+  close(reason = "codex app-server closed"): Promise<void> {
+    if (!this.closing) {
+      this.failPending(reason);
+      this.proc.stdin!.end();
+      this.closing = terminateTree(this.proc, this.killGraceMs);
+    }
+    return this.closing;
   }
 }
 
@@ -173,10 +213,22 @@ export function normalizeCodexRateLimits(result: unknown): CodexNormalized {
 
 // ---- fetch ---------------------------------------------------------------
 
-export async function fetchCodex(account: ResolvedAccount): Promise<QuotaSnapshot> {
+export interface CodexFetchOptions {
+  /** Hard budget for the whole fetch, including app-server startup. */
+  timeoutMs?: number;
+  /** Time between SIGTERM and SIGKILL when tearing the app-server down. */
+  killGraceMs?: number;
+}
+
+export async function fetchCodex(account: ResolvedAccount, opts: CodexFetchOptions = {}): Promise<QuotaSnapshot> {
+  const timeoutMs = opts.timeoutMs ?? CODEX_FETCH_TIMEOUT_MS;
   let client: AppServerClient | null = null;
+  let deadline: NodeJS.Timeout | undefined;
   try {
-    client = await AppServerClient.start(account.path);
+    client = AppServerClient.spawn(account.path, { killGraceMs: opts.killGraceMs });
+    const c = client;
+    deadline = setTimeout(() => void c.close(`codex app-server timed out after ${Math.round(timeoutMs / 1000)}s`), timeoutMs);
+    await client.initialize();
     const acct = await client.request<JsonObject>("account/read", { refreshToken: false });
     const info = isObject(acct.account) ? acct.account : null;
     if (!info) {
@@ -208,7 +260,8 @@ export async function fetchCodex(account: ResolvedAccount): Promise<QuotaSnapsho
   } catch (e) {
     return snapshot(account, "error", { message: errorMessage(e) });
   } finally {
-    client?.close();
+    clearTimeout(deadline);
+    await client?.close();
   }
 }
 
@@ -225,7 +278,7 @@ export async function startCodexLogin(codexHome: string, timeoutMs = 5 * 60_000)
   const close = () => {
     if (closed) return;
     closed = true;
-    client.close();
+    void client.close();
   };
   const completed = new Promise<{ email: string | null; plan: string | null }>((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error("login timed out")), timeoutMs);

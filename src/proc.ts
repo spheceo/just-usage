@@ -1,7 +1,81 @@
-import { spawn } from "node:child_process";
+import { spawn, type ChildProcess, type SpawnOptions } from "node:child_process";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { delimiter, join } from "node:path";
+
+// ---- child tracking -------------------------------------------------------
+// Every background child gets its own process group (POSIX), so killing the
+// group also takes down grandchildren such as the native binary behind an npm
+// wrapper. All live children are tracked so shutdown can reap them.
+
+const children = new Set<ChildProcess>();
+const exited = new WeakSet<ChildProcess>();
+const usesGroups = process.platform !== "win32";
+
+/** spawn() in a fresh process group, tracked until it exits. */
+export function spawnTracked(cmd: string, args: string[], opts: SpawnOptions = {}): ChildProcess {
+  const child = spawn(cmd, args, { ...opts, detached: usesGroups });
+  children.add(child);
+  const forget = () => {
+    exited.add(child);
+    children.delete(child);
+  };
+  child.once("exit", forget);
+  child.once("error", forget);
+  return child;
+}
+
+/** Live tracked children. */
+export function trackedChildren(): number {
+  return children.size;
+}
+
+/** True while the child is unreaped or anything is left in its process group. */
+function groupAlive(child: ChildProcess): boolean {
+  if (!child.pid) return false;
+  if (!exited.has(child)) return true;
+  if (!usesGroups) return false;
+  try {
+    process.kill(-child.pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Signal the child's whole process group. Never throws. */
+export function signalTree(child: ChildProcess, signal: NodeJS.Signals): void {
+  if (!child.pid) return;
+  try {
+    if (usesGroups) process.kill(-child.pid, signal);
+    else if (signal === "SIGKILL") spawn("taskkill", ["/pid", String(child.pid), "/T", "/F"], { stdio: "ignore" }).on("error", () => {});
+    else child.kill(signal);
+  } catch {
+    // Group already gone.
+  }
+}
+
+/** SIGTERM the group, SIGKILL whatever is left after `graceMs`. Resolves once the group is gone. */
+export async function terminateTree(child: ChildProcess, graceMs = 1500): Promise<void> {
+  if (!groupAlive(child)) return;
+  signalTree(child, "SIGTERM");
+  const deadline = Date.now() + graceMs;
+  while (Date.now() < deadline && groupAlive(child)) await new Promise((r) => setTimeout(r, 50));
+  if (!groupAlive(child)) return;
+  signalTree(child, "SIGKILL");
+  const hard = Date.now() + 1000;
+  while (Date.now() < hard && groupAlive(child)) await new Promise((r) => setTimeout(r, 25));
+}
+
+/** Terminate every tracked child (SIGTERM, then SIGKILL after `graceMs`). */
+export async function stopAllChildren(graceMs = 1500): Promise<void> {
+  await Promise.all([...children].map((c) => terminateTree(c, graceMs)));
+}
+
+/** Synchronous last resort for `process.on("exit")`: SIGKILL every tracked group. */
+export function killAllChildren(): void {
+  for (const c of children) signalTree(c, "SIGKILL");
+}
 
 export interface RunResult {
   code: number | null;
@@ -27,24 +101,25 @@ export function run(cmd: string, args: string[], opts: RunOptions = {}): Promise
       clearTimeout(timer);
       resolve({ code, stdout, stderr });
     };
-    const child = spawn(cmd, args, {
+    const child = spawnTracked(cmd, args, {
       env: spawnEnv(opts.env),
       stdio: ["pipe", "pipe", "pipe"],
     });
     const timer = setTimeout(() => {
-      child.kill("SIGKILL");
+      signalTree(child, "SIGKILL");
       stderr += "\n[just-usage] timed out";
       finish(null);
     }, opts.timeoutMs ?? 15_000);
-    child.stdout.on("data", (d) => (stdout += d));
-    child.stderr.on("data", (d) => (stderr += d));
+    child.stdout!.on("data", (d) => (stdout += d));
+    child.stderr!.on("data", (d) => (stderr += d));
     child.on("error", (err) => {
       stderr += String(err);
       finish(null);
     });
     child.on("close", (code) => finish(code));
-    if (opts.input !== undefined) child.stdin.write(opts.input);
-    child.stdin.end();
+    child.stdin!.on("error", () => {});
+    if (opts.input !== undefined) child.stdin!.write(opts.input);
+    child.stdin!.end();
   });
 }
 

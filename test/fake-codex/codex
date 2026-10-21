@@ -1,0 +1,33 @@
+#!/usr/bin/env node
+// Stand-in for the npm `codex` wrapper: starts a "native" grandchild and relays
+// stdio to it. FAKE_CODEX_MODE=hang makes both ignore SIGTERM and stdin EOF and
+// never answer, like a wedged app-server. Each process records its pid.
+const { spawn } = require("node:child_process");
+const { writeFileSync } = require("node:fs");
+const { join } = require("node:path");
+
+const dir = process.env.FAKE_CODEX_PIDS;
+const hang = process.env.FAKE_CODEX_MODE === "hang";
+const role = process.argv[2] === "--native" ? "native" : "wrapper";
+if (dir) writeFileSync(join(dir, `${role}-${process.pid}`), "");
+if (hang) process.on("SIGTERM", () => {});
+
+if (role === "wrapper") {
+  const child = spawn(process.execPath, [__filename, "--native"], { stdio: "inherit" });
+  if (!hang) process.on("SIGTERM", () => child.kill("SIGTERM"));
+  child.on("exit", (code) => process.exit(code ?? 0));
+} else if (hang) {
+  setInterval(() => {}, 1 << 30);
+} else {
+  const send = (msg) => process.stdout.write(JSON.stringify({ jsonrpc: "2.0", ...msg }) + "\n");
+  require("node:readline").createInterface({ input: process.stdin }).on("line", (line) => {
+    const msg = JSON.parse(line);
+    if (msg.id === undefined) return;
+    if (msg.method === "initialize") send({ id: msg.id, result: {} });
+    else if (msg.method === "account/read") send({ id: msg.id, result: { account: { type: "chatgpt", email: "a@b.c", planType: "plus" } } });
+    else if (msg.method === "account/rateLimits/read")
+      send({ id: msg.id, result: { rateLimits: { limitId: "codex", primary: { usedPercent: 10, windowDurationMins: 300, resetsAt: 0 } } } });
+    else send({ id: msg.id, error: { message: "unknown" } });
+  });
+  process.stdin.on("end", () => process.exit(0));
+}
